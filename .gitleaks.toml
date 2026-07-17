@@ -3,6 +3,11 @@ title = "PriceLy secret-scanning rules"
 [extend]
 useDefault = true
 
+[allowlist]
+description = "Browser localStorage key, not a credential"
+regexTarget = "line"
+regexes = ['''BASKET_STORAGE_KEY\s*=\s*"pricely_basket_v1"''']
+
 [[rules]]
 id = "minio-credential-assignment"
 description = "MinIO access keys and secret keys must not be committed"
