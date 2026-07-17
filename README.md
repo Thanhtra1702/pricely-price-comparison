@@ -516,7 +516,7 @@ All configuration is managed through environment variables. Copy `.env.example` 
 
 | Variable | Required | Default | Description |
 |----------|:--------:|---------|-------------|
-| `MINIO_ENDPOINT` | ✅ | `https://minio.example.internal` | MinIO server address |
+| `MINIO_ENDPOINT` | ✅ | `http://192.168.199.73:9020` | MinIO server address |
 | `MINIO_ACCESS_KEY` | ✅ | — | Read-only MinIO access key |
 | `MINIO_SECRET_KEY` | ✅ | — | Read-only MinIO secret key |
 | `MINIO_BUCKET` | — | `supermarket-lakehouse` | S3 bucket name |
@@ -524,7 +524,7 @@ All configuration is managed through environment variables. Copy `.env.example` 
 | `OLLAMA_BASE_URL` | — | `http://host.docker.internal:11434` | Ollama API endpoint |
 | `OLLAMA_MODEL` | — | `qwen2.5:3b` | LLM model for intent analysis |
 | `EMBEDDING_MODEL` | — | `bge-m3:latest` | Model for semantic embeddings |
-| `POSTGRES_PASSWORD` | ✅ | — | Strong, unique PostgreSQL password |
+| `POSTGRES_PASSWORD` | — | `pricebot` | PostgreSQL password |
 | `CORS_ORIGINS` | — | `http://localhost:3000` | Allowed CORS origins (comma-sep) |
 | `HUDI_PACKAGES` | — | `org.apache.hudi:hudi-spark3.5-bundle_2.12:1.2.0,...` | Spark/Hudi packages |
 

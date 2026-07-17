@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: pricebot
       POSTGRES_USER: pricebot
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pricebot}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -21,7 +21,7 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: "postgresql+psycopg://pricebot:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/pricebot"
+      DATABASE_URL: postgresql+psycopg://pricebot:${POSTGRES_PASSWORD:-pricebot}@postgres:5432/pricebot
       CORS_ORIGINS: http://localhost:3000
       SPARK_LOCAL_IP: 127.0.0.1
     ports:

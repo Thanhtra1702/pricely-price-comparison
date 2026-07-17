@@ -34,11 +34,6 @@ def test_current_hudi_paths_are_store_scoped():
     assert sync.STORE_TABLES["offers"].format(retailer="go") == "gold/fact_price_snapshot_daily_hudi/store=go"
 
 
-def test_minio_tls_follows_endpoint_scheme():
-    assert sync.minio_uses_tls("https://minio.example.internal") is True
-    assert sync.minio_uses_tls("http://minio") is False
-
-
 def test_keeps_latest_source_run_before_serving_chatbot():
     rows = [
         {"source_run_id": "20260714_084309", "price_snapshot_id": "old"},

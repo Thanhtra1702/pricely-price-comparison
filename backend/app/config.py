@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://pricebot:pricebot@postgres:5432/pricebot"
-    minio_endpoint: str = "https://minio.example.internal"
+    minio_endpoint: str = "http://host.docker.internal:9020"
     minio_access_key: str = ""
     minio_secret_key: str = ""
     minio_bucket: str = "supermarket-lakehouse"

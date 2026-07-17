@@ -2,7 +2,6 @@ import json
 import re
 from collections import defaultdict
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 import boto3
 from botocore.config import Config
@@ -42,10 +41,6 @@ def minio_client(settings: Settings):
         aws_secret_access_key=settings.minio_secret_key,
         config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
     )
-
-
-def minio_uses_tls(endpoint: str) -> bool:
-    return urlparse(endpoint).scheme.lower() == "https"
 
 
 def latest_successful_run(settings: Settings) -> dict | None:
@@ -92,7 +87,7 @@ def build_spark(settings: Settings) -> SparkSession:
         .config("spark.hadoop.fs.s3a.access.key", settings.minio_access_key)
         .config("spark.hadoop.fs.s3a.secret.key", settings.minio_secret_key)
         .config("spark.hadoop.fs.s3a.path.style.access", "true")
-        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", str(minio_uses_tls(settings.minio_endpoint)).lower())
+        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .getOrCreate()
     )
