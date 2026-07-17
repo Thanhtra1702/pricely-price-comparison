@@ -1,237 +1,78 @@
-# Runbook Máy 2: Truy cập Hudi trên MinIO
+# Runbook: đọc Hudi từ MinIO
 
-Tài liệu này dành cho máy phân tích dữ liệu Windows, không ghi dữ liệu vào Hudi.
+Tài liệu này dành cho máy phân tích chỉ đọc dữ liệu từ MinIO. Không ghi endpoint nội bộ, IP, access key hoặc secret key vào Git.
 
-## 1. Thông tin kết nối
+## 1. Chuẩn bị biến môi trường
 
-Thay đổi các giá trị nếu máy 1 dùng cấu hình khác:
-
-```text
-Máy MinIO: 192.168.199.73 (Fedora)
-Máy phân tích: 192.168.199.120 (Windows)
-S3 API:    http://192.168.199.73:9020
-Bucket:    supermarket-lakehouse
-Prefix:    gold/fact_price_snapshot_daily
-```
-
-Máy 2 cần kết nối cùng LAN hoặc VPN với máy 1.
-
-## 2. Kiểm tra mạng trên Windows
-
-Mở PowerShell trên máy `192.168.199.120`:
+Lấy các giá trị từ secret manager hoặc quản trị hệ thống. Tài khoản MinIO phải chỉ có quyền `ListBucket` và `GetObject` cho prefix `gold/` của bucket cần đọc.
 
 ```powershell
-ping 192.168.199.73
-Test-NetConnection 192.168.199.73 -Port 9020
-curl.exe http://192.168.199.73:9020/minio/health/live
+$env:MINIO_ENDPOINT = "https://minio.example.internal"
+$env:MINIO_ACCESS_KEY = "<read-only-access-key>"
+$env:MINIO_SECRET_KEY = "<read-only-secret-key>"
+$env:MINIO_BUCKET = "supermarket-lakehouse"
 ```
 
-Kết quả mong đợi của lệnh `curl`:
+Ưu tiên endpoint HTTPS có chứng chỉ hợp lệ. Máy phân tích phải kết nối qua LAN/VPN được cấp quyền; không mở MinIO ra Internet công khai nếu không có lớp bảo vệ phù hợp.
 
-```text
-OK
-```
-
-Nếu ping được nhưng `curl` lỗi, kiểm tra firewall hoặc port mapping trên máy 1.
-
-## 3. Truy cập bằng MinIO Client trên Windows
-
-Máy 2 cần Docker Desktop, bật Linux containers. Có thể dùng Docker để tránh nhầm với GNU Midnight Commander đang dùng lệnh `mc`:
-
-Trong PowerShell, ký tự nối dòng là dấu backtick `` ` ``; nếu lệnh nhiều dòng báo lỗi, chạy trên một dòng hoặc thay `\\` cuối dòng bằng `` ` ``.
+## 2. Kiểm tra kết nối
 
 ```powershell
-docker run --rm --network host \
-  -v "$HOME/.minio-mc:/root/.mc" \
-  minio/mc alias set \
-  remote http://192.168.199.73:9020 \
-  minioadmin \
-  change-this-password
+$minioHost = ([uri]$env:MINIO_ENDPOINT).Host
+Test-NetConnection $minioHost -Port 443
+curl.exe "$env:MINIO_ENDPOINT/minio/health/live"
 ```
 
-Kiểm tra alias và bucket:
+Kết quả health check mong đợi là `OK`. Nếu lỗi, kiểm tra VPN/firewall/chứng chỉ TLS cùng quản trị hệ thống.
+
+## 3. Dùng MinIO Client trong Docker
+
+Không truyền key trực tiếp trên command line vì có thể bị lưu vào shell history. Lệnh dưới đây đọc biến môi trường của phiên PowerShell hiện tại:
 
 ```powershell
-docker run --rm --network host \
-  -v "$HOME/.minio-mc:/root/.mc" \
-  minio/mc alias list
-
-docker run --rm --network host \
-  -v "$HOME/.minio-mc:/root/.mc" \
-  minio/mc ls remote
+docker run --rm `
+  -e MINIO_ENDPOINT -e MINIO_ACCESS_KEY -e MINIO_SECRET_KEY `
+  --entrypoint /bin/sh minio/mc -c 'mc alias set remote "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"; mc ls remote/'
 ```
 
-Kiểm tra Hudi files:
+Để kiểm tra Gold Hudi files:
 
 ```powershell
-docker run --rm --network host \
-  -v "$HOME/.minio-mc:/root/.mc" \
-  minio/mc ls --recursive \
-  remote/supermarket-lakehouse/gold/fact_price_snapshot_daily
+docker run --rm `
+  -e MINIO_ENDPOINT -e MINIO_ACCESS_KEY -e MINIO_SECRET_KEY -e MINIO_BUCKET `
+  --entrypoint /bin/sh minio/mc -c 'mc alias set remote "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"; mc ls --recursive "remote/$MINIO_BUCKET/gold"'
 ```
 
-Cần thấy cả các thành phần như:
+## 4. Đọc một Hudi table bằng Spark
 
-```text
-.hoodie/
-manifest.json
-*.parquet
-```
-
-## 4. Chuẩn bị Spark trên máy 2 Windows
-
-Dùng Spark 3.5.x và Hudi bundle cùng version với máy 1. Có thể chạy Spark bằng WSL2 hoặc Docker Desktop:
-
-```bash
-spark-submit \
-  --packages \
-  org.apache.hudi:hudi-spark3.5-bundle_2.12:1.2.0,\
-  org.apache.hadoop:hadoop-aws:3.3.4 \
-  --conf spark.hadoop.fs.s3a.endpoint=http://192.168.199.73:9020 \
-  --conf spark.hadoop.fs.s3a.access.key=minioadmin \
-  --conf spark.hadoop.fs.s3a.secret.key=change-this-password \
-  --conf spark.hadoop.fs.s3a.path.style.access=true \
-  --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false \
-  --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
-  your_analysis.py
-```
-
-Trong môi trường thật, không truyền credential trực tiếp trên command line; dùng secret manager, IAM role hoặc file cấu hình được bảo vệ.
-
-## 5. Đọc một Hudi table
-
-Trong `your_analysis.py`:
+Spark cần bundle Hudi/Hadoop tương thích. Đặt các biến môi trường ở bước 1 trước khi chạy script.
 
 ```python
+import os
 from pyspark.sql import SparkSession
 
 spark = (
     SparkSession.builder
     .appName("read_supermarket_hudi")
-    .config("spark.hadoop.fs.s3a.endpoint", "http://192.168.199.73:9020")
-    .config("spark.hadoop.fs.s3a.access.key", "minioadmin")
-    .config("spark.hadoop.fs.s3a.secret.key", "change-this-password")
+    .config("spark.hadoop.fs.s3a.endpoint", os.environ["MINIO_ENDPOINT"])
+    .config("spark.hadoop.fs.s3a.access.key", os.environ["MINIO_ACCESS_KEY"])
+    .config("spark.hadoop.fs.s3a.secret.key", os.environ["MINIO_SECRET_KEY"])
     .config("spark.hadoop.fs.s3a.path.style.access", "true")
-    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "true")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
     .getOrCreate()
 )
 
-path = (
-    "s3a://supermarket-lakehouse/gold/"
-    "fact_price_snapshot_daily/store=go/date=2026-07-14/"
-    "run_id=20260714_084309/price_snapshot_daily_hudi"
-)
-
+path = "s3a://supermarket-lakehouse/gold/fact_price_snapshot_daily_hudi/store=go"
 df = spark.read.format("hudi").load(path)
-df.printSchema()
 df.show(20, truncate=False)
-print("rows:", df.count())
-
 spark.stop()
 ```
 
-## 6. Đọc tất cả retailer
+Hudi cần thư mục `.hoodie/`; không chỉ tải riêng các file Parquet.
 
-```python
-from functools import reduce
-from pyspark.sql import DataFrame
+## 5. Bảo mật vận hành
 
-base = "s3a://supermarket-lakehouse/gold/fact_price_snapshot_daily"
-retailers = ["bachhoaxanh", "go", "lottemart", "mmvietnam", "winmart"]
-
-frames = []
-for retailer in retailers:
-    path = f"{base}/store={retailer}/date=2026-07-14"
-    frames.append(spark.read.format("hudi").load(path))
-
-all_prices = reduce(DataFrame.unionByName, frames)
-all_prices.groupBy("retailer_id").count().show()
-```
-
-## 7. Validate dữ liệu sau khi đọc
-
-```python
-from pyspark.sql import functions as F
-
-assert all_prices.filter(F.col("price_snapshot_id").isNull()).count() == 0
-
-duplicate_groups = (
-    all_prices
-    .groupBy(
-        "snapshot_date",
-        "retailer_id",
-        "store_code",
-        "retailer_product_id",
-    )
-    .count()
-    .filter(F.col("count") > 1)
-)
-
-assert duplicate_groups.count() == 0
-
-all_prices.select(
-    "retailer_id",
-    "product_name",
-    "current_price",
-    "discount_percent",
-    "is_on_promotion",
-).show(20, truncate=False)
-```
-
-## 8. Xử lý lỗi thường gặp
-
-### Ping được nhưng curl không được
-
-Trên máy 1:
-
-```bash
-docker ps --filter "name=minio-local"
-sudo firewall-cmd --add-port=9020/tcp --permanent
-sudo firewall-cmd --reload
-```
-
-### Access denied
-
-Kiểm tra lại username, password và bucket policy. Máy 2 chỉ nên dùng user read-only khi chuyển sang môi trường ổn định.
-
-### Không tìm thấy Hudi table
-
-Kiểm tra prefix có đủ `.hoodie` hay không:
-
-```bash
-docker run --rm --network host \
-  -v "$HOME/.minio-mc:/root/.mc" \
-  minio/mc ls --recursive \
-  remote/supermarket-lakehouse/gold/fact_price_snapshot_daily/store=go
-```
-
-Không chỉ upload Parquet; Hudi cần metadata trong `.hoodie` để đọc timeline và table state.
-
-### Spark không tìm thấy `s3a`
-
-Thêm dependency:
-
-```text
-org.apache.hadoop:hadoop-aws:3.3.4
-```
-
-và bảo đảm version Hadoop tương thích với Spark image đang dùng.
-
-## 9. Quyền của máy 2
-
-Máy 2 chỉ nên có quyền:
-
-```text
-ListBucket
-GetObject
-```
-
-Không cấp:
-
-```text
-PutObject
-DeleteObject
-```
-
-Máy 2 chỉ phân tích dữ liệu; máy 1 là writer duy nhất của Hudi table.
+- Dùng service account read-only, scope nhỏ nhất cần thiết, và xoay vòng key định kỳ.
+- Lưu biến môi trường trong secret manager/CI secrets, không trong notebook, `.env`, source code hay shell history.
+- Nếu bắt buộc dùng HTTP trong môi trường development cô lập, chỉ dùng trên mạng riêng; production cần HTTPS.

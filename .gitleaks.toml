@@ -1,0 +1,28 @@
+title = "PriceLy secret-scanning rules"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "minio-credential-assignment"
+description = "MinIO access keys and secret keys must not be committed"
+regex = '''(?i)MINIO_(?:ACCESS|SECRET)_KEY\s*=\s*([A-Za-z0-9/+_=-]{20,})'''
+secretGroup = 1
+entropy = 2.5
+keywords = ["MINIO_ACCESS_KEY", "MINIO_SECRET_KEY"]
+
+  [[rules.allowlists]]
+  regexTarget = "secret"
+  regexes = ['''^replace-with-read-only-(key|secret)$''']
+
+[[rules]]
+id = "postgres-password-assignment"
+description = "PostgreSQL passwords must not be committed"
+regex = '''(?i)POSTGRES_PASSWORD\s*=\s*([A-Za-z0-9!@#$%^&*()_+./=-]{12,})'''
+secretGroup = 1
+entropy = 2.5
+keywords = ["POSTGRES_PASSWORD"]
+
+  [[rules.allowlists]]
+  regexTarget = "secret"
+  regexes = ['''^replace-with-a-strong-unique-password$''']

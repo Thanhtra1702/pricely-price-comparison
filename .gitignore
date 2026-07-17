@@ -10,6 +10,15 @@ OpenJDK17U-jdk_x64_windows_hotspot_17.0.19_10/
 .env
 .env.*
 !.env.example
+.secrets/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
+gitleaks-report*.json
 backend/.pytest_cache/
 frontend/node_modules/
 frontend/.next/
