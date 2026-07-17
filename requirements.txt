@@ -1,0 +1,4 @@
+playwright==1.52.0
+
+# Spark 3.5.x runtime for the Hudi reader
+pyspark==3.5.6
