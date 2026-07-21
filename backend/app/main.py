@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio, datetime, json, os, re, uuid
+from dataclasses import replace
 
 FEW_SHOT_EXAMPLES = (
     "VÍ DỤ MẪU CHUẨN (FEW-SHOT EXAMPLES):\n"
