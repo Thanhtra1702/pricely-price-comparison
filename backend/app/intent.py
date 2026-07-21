@@ -424,7 +424,6 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         return Intent(
             name=new_name,
             query=query,
-            product=intent.product or query,
             brand=intent.brand,
             package=intent.package,
             retailers=intent.retailers,
