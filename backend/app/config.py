@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "qwen2.5:3b"
     ollama_answer_generation: bool = True
-    ollama_answer_timeout_seconds: int = 15
+    ollama_answer_timeout_seconds: int = 45
     ollama_answer_evaluation: bool = True
     ollama_eval_timeout_seconds: int = 10
     ollama_eval_pass_score: float = 3.5

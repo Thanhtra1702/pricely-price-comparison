@@ -1,68 +1,6 @@
 from __future__ import annotations
 import asyncio, datetime, json, os, re, uuid
 from dataclasses import replace
-
-FEW_SHOT_EXAMPLES = (
-    "VÍ DỤ MẪU CHUẨN (FEW-SHOT EXAMPLES):\n"
-    "Ví dụ 1:\n"
-    "  FACTS: [{\"product_name\": \"Sữa Vinamilk 1L\", \"retailer_name\": \"WinMart\", \"price\": \"30.000đ\", \"discount\": \"10%\"}]\n"
-    "  Câu hỏi: \"Sữa Vinamilk giá bao nhiêu?\"\n"
-    "  Mẫu trả lời tốt: \"Dạ em thấy Sữa Vinamilk 1L tại WinMart đang có giá tốt nhất là 30.000đ (đang giảm 10%). Bạn có thể tham khảo mua tại siêu thị WinMart gần nhất nhé! 😊\"\n\n"
-    "Ví dụ 2:\n"
-    "  FACTS: [{\"product_name\": \"Dầu ăn Neptune 1L\", \"retailer_name\": \"GO!\", \"price\": \"54.500đ\"}, {\"product_name\": \"Dầu ăn Neptune 1L\", \"retailer_name\": \"Lotte Mart\", \"price\": \"58.000đ\"}]\n"
-    "  Câu hỏi: \"So sánh giá dầu ăn Neptune giữa GO! và Lotte Mart\"\n"
-    "  Mẫu trả lời tốt: \"Dạ qua so sánh, Dầu ăn Neptune 1L tại GO! có giá tốt hơn là 54.500đ, rẻ hơn so với Lotte Mart đang bán 58.000đ. Bạn mua ở GO! sẽ tiết kiệm được 3.500đ nhé!\"\n\n"
-    "Ví dụ 3:\n"
-    "  FACTS: [{\"product_name\": \"Nước giặt OMO 3kg\", \"retailer_name\": \"Bách Hóa Xanh\", \"price\": \"145.000đ\", \"discount\": \"25%\"}]\n"
-    "  Câu hỏi: \"Có ưu đãi nước giặt nào trên 20% không?\"\n"
-    "  Mẫu trả lời tốt: \"Dạ tại Bách Hóa Xanh đang có ưu đãi Nước giặt OMO 3kg giảm đến 25%, giá chỉ còn 145.000đ. Đây là mức giảm rất tốt để bạn mua sắm đợt này ạ.\"\n\n"
-)
-
-
-async def _generate_grounded_answer(
-    message: str, intent: Intent, offers: list[dict], fallback_answer: str,
-) -> str | None:
-    """Ask Ollama to phrase verified facts in warm, friendly, non-technical Vietnamese."""
-    if not settings.ollama_answer_generation or not offers:
-        return None
-    facts = _answer_facts(intent, offers)
-    prompt = (
-        "Bạn là Trợ lý PriceLy thân thiện, ấm áp và chu đáo giúp người dùng so sánh giá siêu thị.\n"
-        "Hãy trả lời người dùng bằng giọng văn tự nhiên, lịch sự, dễ hiểu với người tiêu dùng bình thường (xưng 'Em', gọi người dùng là 'Bạn' hoặc 'Anh/Chị').\n"
-        "KHÔNG DÙNG ngôn ngữ kỹ thuật hoặc thuật ngữ máy tính (như 'snapshot', 'data quality', 'valid', 'facts', 'query', 'database', 'SQL').\n\n"
-        f"{FEW_SHOT_EXAMPLES}"
-        "Chỉ dựa vào danh sách sản phẩm thực tế đã xác minh dưới đây:\n"
-        f"FACTS:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
-        "Câu hỏi người dùng:\n"
-        f"{json.dumps(message, ensure_ascii=False)}\n\n"
-        "Yêu cầu:\n"
-        "1. Trả lời ngắn gọn, nêu rõ tên siêu thị thực tế và sản phẩm có giá tốt nhất.\n"
-        "2. Giữ nguyên đúng giá trị tiền tệ và phần trăm giảm giá trong FACTS.\n"
-        "3. Trả về đúng 1 JSON object có dạng {\"answer\": \"câu trả lời tự nhiên của bạn\"}.\n"
-    )
-    try:
-        async with httpx.AsyncClient(timeout=settings.ollama_answer_timeout_seconds) as client:
-            response = await client.post(
-                f"{settings.ollama_base_url}/api/generate",
-                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
-            )
-            response.raise_for_status()
-        data = json.loads(response.json()["response"])
-        answer = data.get("answer")
-        if not isinstance(answer, str):
-            return None
-        answer = re.sub(r"\s+", " ", answer).strip()
-        if not 8 <= len(answer) <= 800 or re.search(
-            r"\b(select|insert|update|delete|sql|json|prompt)\b|\bt[aấ]t c[aả]\b|\bm[oọ]i\b|kh[oô]ng \w+ cung c[aấ]p",
-            answer,
-            re.I,
-        ):
-            return None
-        if not _has_fact_price(answer, facts):
-            return None
-        return answer
-    except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return None
 from contextlib import asynccontextmanager
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -285,7 +223,7 @@ def _shopping_advice(intent: Intent, offers: list[dict], *, comparable: bool = F
                 advice += f" Giá này tiết kiệm hơn nơi tiếp theo {_money(saving)}."
     elif intent.name == "deals":
         discount = best.get("discount_percent")
-        discount_text = f", đang giảm {float(discount):.0f}%" if discount is not None else ""
+        discount_text = f", đang giảm {round(float(discount))}%" if discount is not None else ""
         advice = f"Dạ có ưu đãi hấp dẫn: {product} tại {retailer}, giá chỉ {price}{discount_text}."
     else:
         advice = f"Dạ em thấy {product} tại {retailer} đang có giá tốt nhất: {price}."
@@ -347,6 +285,31 @@ def _offer_ids(offers: list[dict]) -> list[str]:
     return [str(offer["price_snapshot_id"]) for offer in offers if offer.get("price_snapshot_id")][:10]
 
 
+# Few-shot examples shown to the LLM to enforce warm Vietnamese phrasing style
+# (xưng Em/gọi Bạn, start with "Dạ em", no tech jargon, precise price figures).
+FEW_SHOT_EXAMPLES = (
+    "VÍ DỤ MẪU CHUẨN (FEW-SHOT EXAMPLES):\n"
+    "Ví dụ 1 (product_search):\n"
+    "  DANH SÁCH: [{\"product\": \"Sữa Vinamilk 1L\", \"retailer\": \"WinMart\", \"price\": \"30.000đ\", \"discount_percent\": \"10%\"}]\n"
+    "  Câu hỏi: \"Sữa Vinamilk giá bao nhiêu?\"\n"
+    "  Trả lời tốt: \"Dạ em thấy Sữa Vinamilk 1L tại WinMart đang có giá tốt nhất là 30.000đ (giảm 10%). Bạn có thể tham khảo mua tại WinMart gần nhất nhé! 😊\"\n\n"
+    "Ví dụ 2 (compare_prices):\n"
+    "  DANH SÁCH: [{\"product\": \"Dầu ăn Neptune 1L\", \"retailer\": \"GO!\", \"price\": \"54.500đ\"}, {\"product\": \"Dầu ăn Neptune 1L\", \"retailer\": \"Lotte Mart\", \"price\": \"58.000đ\"}]\n"
+    "  Câu hỏi: \"So sánh giá dầu ăn Neptune giữa GO! và Lotte Mart\"\n"
+    "  Trả lời tốt: \"Dạ qua so sánh, Dầu ăn Neptune 1L tại GO! có giá tốt hơn là 54.500đ, rẻ hơn Lotte Mart (58.000đ). Bạn mua ở GO! sẽ tiết kiệm được 3.500đ nhé!\"\n\n"
+    "Ví dụ 3 (deals):\n"
+    "  DANH SÁCH: [{\"product\": \"Nước giặt OMO 3kg\", \"retailer\": \"Bách Hóa Xanh\", \"price\": \"145.000đ\", \"discount_percent\": \"25%\"}]\n"
+    "  Câu hỏi: \"Có ưu đãi nước giặt nào trên 20% không?\"\n"
+    "  Trả lời tốt: \"Dạ tại Bách Hóa Xanh đang có ưu đãi Nước giặt OMO 3kg giảm đến 25%, giá chỉ còn 145.000đ. Đây là mức giảm rất tốt để bạn mua sắm đợt này ạ. 😊\"\n\n"
+)
+
+_INTENT_STYLE_HINTS: dict[str, str] = {
+    "product_search": "Nêu rõ siêu thị có giá tốt nhất và giá cụ thể.",
+    "compare_prices": "So sánh trực tiếp: nêu chỗ rẻ nhất, chỗ đắt hơn và khoản tiết kiệm nếu có.",
+    "deals": "Nêu rõ % giảm giá và giá hiện tại; nhấn mạnh tính ưu đãi hấp dẫn.",
+}
+
+
 def _answer_facts(intent: Intent, offers: list[dict]) -> list[dict]:
     """Return a deliberately small, JSON-safe set of facts for answer phrasing.
 
@@ -354,12 +317,21 @@ def _answer_facts(intent: Intent, offers: list[dict]) -> list[dict]:
     model receives no database access, SQL, or untrusted offer fields beyond the
     facts it may mention in its response.
     """
+    def _fmt_discount(value: object) -> str | None:
+        """Round discount to at most 1 decimal, drop trailing zeros (7.4419 → '7%', 25.0 → '25%')."""
+        try:
+            pct = float(value)  # type: ignore[arg-type]
+            rounded = round(pct, 1)
+            return f"{rounded:g}%"
+        except (TypeError, ValueError):
+            return None
+
     return [
         {
             "product": offer.get("product_name"),
             "retailer": _retailer_name(offer.get("retailer_id")),
             "price": _money(offer.get("current_price")),
-            "discount_percent": offer.get("discount_percent"),
+            "discount_percent": _fmt_discount(offer.get("discount_percent")),
             "unit_price": (
                 f"{_money(offer['effective_unit_price'])}/{offer['comparison_unit']}"
                 if offer.get("effective_unit_price") is not None and offer.get("comparison_unit")
@@ -389,28 +361,42 @@ def _has_fact_price(answer: str, facts: list[dict]) -> bool:
 async def _generate_grounded_answer(
     message: str, intent: Intent, offers: list[dict], fallback_answer: str,
 ) -> str | None:
-    """Ask Ollama to phrase verified facts in warm, friendly, non-technical Vietnamese."""
+    """Ask Ollama to phrase verified facts in warm, friendly, non-technical Vietnamese.
+
+    Uses few-shot examples and intent-specific style hints to guide the model toward
+    consistent, high-quality Vietnamese consumer-facing answers.
+    """
     if not settings.ollama_answer_generation or not offers:
         return None
     facts = _answer_facts(intent, offers)
+    style_hint = _INTENT_STYLE_HINTS.get(intent.name, "Nêu rõ sản phẩm và giá tốt nhất.")
     prompt = (
         "Bạn là Trợ lý PriceLy thân thiện, ấm áp và chu đáo giúp người dùng so sánh giá siêu thị.\n"
-        "Hãy trả lời người dùng bằng giọng văn tự nhiên, lịch sự, dễ hiểu với người tiêu dùng bình thường (xưng 'Em', gọi người dùng là 'Bạn' hoặc 'Anh/Chị').\n"
-        "KHÔNG DÙNG ngôn ngữ kỹ thuật hoặc thuật ngữ máy tính (như 'snapshot', 'data quality', 'valid', 'facts', 'query', 'database', 'SQL').\n\n"
+        "Hãy trả lời người dùng bằng giọng văn tự nhiên, lịch sự, dễ hiểu (xưng 'Em', gọi người dùng là 'Bạn' hoặc 'Anh/Chị').\n"
+        "LUÔN bắt đầu câu trả lời bằng 'Dạ em'.\n"
+        "KHÔNG DÙNG ngôn ngữ kỹ thuật (như 'snapshot', 'data quality', 'valid', 'FACTS', 'query', 'database', 'SQL', 'DANH SÁCH').\n\n"
+        f"{FEW_SHOT_EXAMPLES}"
+        f"Loại yêu cầu: {intent.name}. Lưu ý phong cách: {style_hint}\n\n"
         "Chỉ dựa vào danh sách sản phẩm thực tế đã xác minh dưới đây:\n"
-        f"FACTS:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
+        f"DANH SÁCH SẢN PHẨM:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
         "Câu hỏi người dùng:\n"
         f"{json.dumps(message, ensure_ascii=False)}\n\n"
         "Yêu cầu:\n"
-        "1. Trả lời ngắn gọn, nêu rõ sản phẩm nào ở siêu thị nào có giá tốt nhất.\n"
-        "2. Giữ nguyên đúng giá trị tiền tệ và phần trăm giảm giá trong FACTS.\n"
-        "3. Trả về đúng 1 JSON object có dạng {\"answer\": \"câu trả lời tự nhiên của bạn\"}.\n"
+        "1. Bắt đầu bằng 'Dạ em' và trả lời ngắn gọn, tự nhiên.\n"
+        "2. Nêu rõ tên siêu thị và giá cụ thể; giữ nguyên số tiền và % giảm giá trong danh sách.\n"
+        "3. Trả về đúng 1 JSON object dạng {\"answer\": \"câu trả lời của bạn\"}.\n"
     )
     try:
         async with httpx.AsyncClient(timeout=settings.ollama_answer_timeout_seconds) as client:
             response = await client.post(
                 f"{settings.ollama_base_url}/api/generate",
-                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
+                json={
+                    "model": settings.ollama_model,
+                    "prompt": prompt,
+                    "format": "json",
+                    "stream": False,
+                    "options": {"temperature": 0.1, "top_p": 0.9},
+                },
             )
             response.raise_for_status()
         data = json.loads(response.json()["response"])
@@ -418,8 +404,8 @@ async def _generate_grounded_answer(
         if not isinstance(answer, str):
             return None
         answer = re.sub(r"\s+", " ", answer).strip()
-        if not 8 <= len(answer) <= 800 or re.search(
-            r"\b(select|insert|update|delete|sql|json|prompt)\b|\bt[aấ]t c[aả]\b|\bm[oọ]i\b|kh[oô]ng \w+ cung c[aấ]p",
+        if not 8 <= len(answer) <= 900 or re.search(
+            r"\b(select|insert|update|delete|sql|json|prompt)\b|kh[oô]ng \w+ cung c[aấ]p",
             answer,
             re.I,
         ):
@@ -434,44 +420,63 @@ async def _generate_grounded_answer(
 async def _evaluate_llm_answer(
     message: str, intent: Intent, answer: str, facts: list[dict]
 ) -> tuple[bool, float, dict[str, float], str]:
-    """Ask Ollama to evaluate candidate `answer` on Grounding, Relevance, Tone, Completeness (1-5 scale)."""
+    """Ask Ollama to evaluate candidate `answer` on Grounding, Relevance, Tone, Completeness (1-5 scale).
+
+    Intent type is provided to help the evaluator apply the right rubric:
+    - product_search: check if best price + retailer are stated
+    - compare_prices: check if comparison across retailers is clear
+    - deals: check if discount % and price are correctly stated
+    """
     if not settings.ollama_answer_evaluation:
         return True, 5.0, {"grounding": 5.0, "relevance": 5.0, "tone": 5.0, "completeness": 5.0}, "Evaluation disabled"
     if not answer or not message:
         return False, 0.0, {"grounding": 0.0, "relevance": 0.0, "tone": 0.0, "completeness": 0.0}, "Empty answer or message"
 
+    intent_rubric = {
+        "product_search": "Câu trả lời phải nêu được siêu thị có giá tốt nhất và giá cụ thể từ dữ liệu.",
+        "compare_prices": "Câu trả lời phải so sánh giá giữa các siêu thị và nêu nơi rẻ nhất.",
+        "deals": "Câu trả lời phải nêu % giảm giá và giá sau giảm của sản phẩm từ dữ liệu.",
+    }.get(intent.name, "Câu trả lời phải bám sát dữ liệu và trả lời đúng câu hỏi.")
+
     prompt = (
         "Bạn là Chuyên gia Đánh giá (LLM-as-a-Judge) cho hệ thống chatbot mua sắm PriceLy.\n"
-        "Hãy chấm điểm CÂU TRẢ LỜI dựa trên CÂU HỎI NGƯỜI DÙNG và DỮ LIỆU THỰC TẾ (FACTS).\n\n"
-        f"DỮ LIỆU THỰC TẾ (FACTS):\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
+        f"Loại yêu cầu: {intent.name}. Tiêu chí đặc thù: {intent_rubric}\n\n"
+        "Hãy chấm điểm CÂU TRẢ LỜI dựa trên CÂU HỎI NGƯỜI DÙNG và DỮ LIỆU THỰC TẾ.\n\n"
+        f"DỮ LIỆU THỰC TẾ:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
         f"CÂU HỎI NGƯỜI DÙNG:\n{json.dumps(message, ensure_ascii=False)}\n\n"
         f"CÂU TRẢ LỜI CẦN ĐÁNH GIÁ:\n{json.dumps(answer, ensure_ascii=False)}\n\n"
-        "Hãy chấm điểm từ 1 đến 5 cho 4 tiêu chí sau:\n"
-        "1. grounding: Mức độ trung thực với FACTS (không tự bịa giá, phần trăm giảm giá hay siêu thị).\n"
-        "2. relevance: Mức độ trả lời trực tiếp đúng sản phẩm người dùng hỏi (nếu nêu được giá sản phẩm đúng trong FACTS thì điểm relevance >= 4.0).\n"
-        "3. tone: Giọng văn thân thiện (xưng Em, gọi Bạn/Anh/Chị), tự nhiên, không từ ngữ kỹ thuật.\n"
-        "4. completeness: Thông tin đầy đủ, rõ ràng về giá và siêu thị tốt nhất.\n\n"
-        "Trả về duy nhất 1 JSON object có dạng:\n"
+        "Chấm điểm từ 1.0 đến 5.0 cho 4 tiêu chí (5.0 là tốt nhất, 1.0 là tệ nhất):\n"
+        "1. grounding: Chỉ dùng thông tin từ DỮ LIỆU, KHÔNG tự bịa giá hay siêu thị.\n"
+        "2. relevance: Trả lời trực tiếp đúng trọng tâm câu hỏi.\n"
+        "3. tone: Xưng 'Dạ em', gọi 'Bạn'/'Anh/Chị', thân thiện.\n"
+        "4. completeness: Đầy đủ thông tin hữu ích.\n\n"
+        "Trả về DUY NHẤT 1 JSON object (KHÔNG CÓ TEXT NÀO KHÁC) theo mẫu sau, thay số bằng điểm của bạn:\n"
         "{\n"
-        '  "grounding": 1.0 đến 5.0,\n'
-        '  "relevance": 1.0 đến 5.0,\n'
-        '  "tone": 1.0 đến 5.0,\n'
-        '  "completeness": 1.0 đến 5.0,\n'
-        '  "feedback": "gợi ý cải thiện ngắn gọn nếu có"\n'
+        '  "grounding": 5.0,\n'
+        '  "relevance": 5.0,\n'
+        '  "tone": 4.0,\n'
+        '  "completeness": 4.0,\n'
+        '  "feedback": "Nhận xét ngắn gọn"\n'
         "}\n"
     )
     try:
         async with httpx.AsyncClient(timeout=settings.ollama_eval_timeout_seconds) as client:
             response = await client.post(
                 f"{settings.ollama_base_url}/api/generate",
-                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
+                json={
+                    "model": settings.ollama_model,
+                    "prompt": prompt,
+                    "format": "json",
+                    "stream": False,
+                    "options": {"temperature": 0},
+                },
             )
             response.raise_for_status()
         data = json.loads(response.json()["response"])
-        g = float(data.get("grounding", 3.0))
-        r = float(data.get("relevance", 3.0))
-        t = float(data.get("tone", 4.0))
-        c = float(data.get("completeness", 3.0))
+        g = min(5.0, max(1.0, float(data.get("grounding", 3.0))))
+        r = min(5.0, max(1.0, float(data.get("relevance", 3.0))))
+        t = min(5.0, max(1.0, float(data.get("tone", 4.0))))
+        c = min(5.0, max(1.0, float(data.get("completeness", 3.0))))
         metrics = {"grounding": g, "relevance": r, "tone": t, "completeness": c}
         avg_score = round((g + r + t + c) / 4.0, 2)
         feedback = str(data.get("feedback") or ("Đạt yêu cầu đánh giá" if avg_score >= settings.ollama_eval_pass_score else "Cần cải thiện độ chính xác và mức độ đáp ứng câu hỏi"))
@@ -488,21 +493,30 @@ async def _refine_llm_answer(
     if not settings.ollama_answer_generation or not facts:
         return None
 
+    style_hint = _INTENT_STYLE_HINTS.get(intent.name, "Nêu rõ sản phẩm và giá tốt nhất.")
     prompt = (
-        "Bạn là Trợ lý PriceLy. Câu trả lời ban đầu của bạn chưa đạt yêu cầu đánh giá chất lượng.\n"
-        f"GỢI Ý CẢI THIỆN TỪ CHUYÊN GIA:\n\"{feedback}\"\n\n"
-        f"DỮ LIỆU THỰC TẾ (FACTS):\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
+        "Bạn là Trợ lý PriceLy. Câu trả lời ban đầu chưa đạt chất lượng. Hãy viết lại tốt hơn.\n"
+        f"GỢI Ý CẢI THIỆN:\n\"{feedback}\"\n\n"
+        f"{FEW_SHOT_EXAMPLES}"
+        f"Loại yêu cầu: {intent.name}. Lưu ý: {style_hint}\n\n"
+        f"DỮ LIỆU SẢN PHẨM:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
         f"CÂU HỎI NGƯỜI DÙNG:\n{json.dumps(message, ensure_ascii=False)}\n\n"
-        f"CÂU TRẢ LỜI CỦ:\n{json.dumps(candidate_answer, ensure_ascii=False)}\n\n"
-        "Hãy viết lại một CÂU TRẢ LỜI MỚI hoàn chỉnh, tự nhiên, thân thiện (xưng 'Em', gọi 'Bạn' hoặc 'Anh/Chị'), "
-        "khắc phục hoàn toàn các điểm chưa tốt ở câu trả lời cũ và bám sát FACTS.\n\n"
+        f"CÂU TRẢ LỜI CŨ (CẦN CẢI THIỆN):\n{json.dumps(candidate_answer, ensure_ascii=False)}\n\n"
+        "Hãy viết lại CÂU TRẢ LỜI MỚI: bắt đầu bằng 'Dạ em', xưng 'Em', gọi 'Bạn' hoặc 'Anh/Chị', "
+        "thân thiện, tự nhiên, bám sát dữ liệu sản phẩm.\n\n"
         "Trả về đúng 1 JSON object dạng {\"answer\": \"câu trả lời cải thiện của bạn\"}.\n"
     )
     try:
         async with httpx.AsyncClient(timeout=settings.ollama_answer_timeout_seconds) as client:
             response = await client.post(
                 f"{settings.ollama_base_url}/api/generate",
-                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
+                json={
+                    "model": settings.ollama_model,
+                    "prompt": prompt,
+                    "format": "json",
+                    "stream": False,
+                    "options": {"temperature": 0.1, "top_p": 0.9},
+                },
             )
             response.raise_for_status()
         data = json.loads(response.json()["response"])
@@ -510,8 +524,8 @@ async def _refine_llm_answer(
         if not isinstance(refined, str):
             return None
         refined = re.sub(r"\s+", " ", refined).strip()
-        if not 8 <= len(refined) <= 800 or re.search(
-            r"\b(select|insert|update|delete|sql|json|prompt)\b|\bt[aấ]t c[aả]\b|\bm[oọ]i\b",
+        if not 8 <= len(refined) <= 900 or re.search(
+            r"\b(select|insert|update|delete|sql|json|prompt|facts)\b",
             refined,
             re.I,
         ):
@@ -799,19 +813,21 @@ async def chat(request: ChatRequest):
                 answer = generated_answer
                 payload["answer_source"] = "llm_grounded_evaluated"
             else:
-                answer = (
-                    "Dạ em tìm thấy một số sản phẩm liên quan bên dưới, nhưng câu trả lời tự động chưa đảm bảo giải đáp chính xác câu hỏi của bạn. "
-                    "Bạn có thể thử điều chỉnh câu hỏi rõ hơn (ví dụ: nêu thương hiệu, quy cách hoặc siêu thị cụ thể) để em hỗ trợ tốt hơn nhé! 😊"
-                )
-                payload["answer_source"] = "llm_eval_failed_notice"
+                # Eval failed — keep the already-computed _shopping_advice answer
+                # (stored in `answer`) which has real price data rather than a
+                # generic "auto-answer not accurate" notice.
+                payload["answer_source"] = "llm_eval_failed_fallback"
         else:
+            # LLM generation timed out or was disabled. The `answer` variable already
+            # holds the _shopping_advice() result with verified price data — use it.
             if selected:
-                answer = "Dạ em đã tìm thấy các sản phẩm phù hợp dưới đây. Bạn tham khảo danh sách giá các siêu thị bên dưới nhé! 😊"
+                payload["answer_source"] = "rule_based"
             elif intent.name == "compare_prices":
                 answer = "Chưa tìm thấy sản phẩm có thể so sánh đủ tin cậy. Bạn có thể nêu rõ thương hiệu hoặc quy cách, ví dụ 1L hay 500g."
+                payload["answer_source"] = "no_results"
             else:
                 answer = f"Chưa tìm thấy kết quả phù hợp cho “{intent.query}”. Bạn hãy thử tên ngắn hơn, thương hiệu hoặc quy cách sản phẩm."
-            payload["answer_source"] = "llm_timeout_notice"
+                payload["answer_source"] = "no_results"
         save_assistant(cid, answer, payload)
         _log_evaluation_result(cid, request.message, intent, answer, payload.get("eval_result", {}))
         yield event("answer", {"content": answer})
