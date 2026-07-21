@@ -112,7 +112,7 @@ def test_chat_stream_evaluation_failure_shows_fallback_notice(monkeypatch):
     with TestClient(main.app) as client:
         response = client.post("/api/chat/stream", json={"message": "Sua Vinamilk gia bao nhieu?"})
     assert response.status_code == 200
-    assert "llm_eval_failed_fallback_notice" in response.text
+    assert "llm_eval_failed_notice" in response.text
     assert "câu trả lời tự động chưa đảm bảo giải đáp chính xác" in response.text
 
 

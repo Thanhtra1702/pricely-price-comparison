@@ -799,9 +799,15 @@ async def chat(request: ChatRequest):
                     "Dạ em tìm thấy một số sản phẩm liên quan bên dưới, nhưng câu trả lời tự động chưa đảm bảo giải đáp chính xác câu hỏi của bạn. "
                     "Bạn có thể thử điều chỉnh câu hỏi rõ hơn (ví dụ: nêu thương hiệu, quy cách hoặc siêu thị cụ thể) để em hỗ trợ tốt hơn nhé! 😊"
                 )
-                payload["answer_source"] = "llm_eval_failed_fallback_notice"
+                payload["answer_source"] = "llm_eval_failed_notice"
         else:
-            payload["answer_source"] = "template_fallback"
+            if selected:
+                answer = "Dạ em đã tìm thấy các sản phẩm phù hợp dưới đây. Bạn tham khảo danh sách giá các siêu thị bên dưới nhé! 😊"
+            elif intent.name == "compare_prices":
+                answer = "Chưa tìm thấy sản phẩm có thể so sánh đủ tin cậy. Bạn có thể nêu rõ thương hiệu hoặc quy cách, ví dụ 1L hay 500g."
+            else:
+                answer = f"Chưa tìm thấy kết quả phù hợp cho “{intent.query}”. Bạn hãy thử tên ngắn hơn, thương hiệu hoặc quy cách sản phẩm."
+            payload["answer_source"] = "llm_timeout_notice"
         save_assistant(cid, answer, payload)
         _log_evaluation_result(cid, request.message, intent, answer, payload.get("eval_result", {}))
         yield event("answer", {"content": answer})
