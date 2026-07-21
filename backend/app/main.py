@@ -10,7 +10,7 @@ from .config import get_settings
 from .database import engine, init_db
 from .intent import Intent, apply_conversation_context, clean_query, parse_intent
 from .matching import normalize_text
-from .repository import autocomplete_offers, browse_deals, compare_offers, conversation_context, latest_snapshot_date, latest_sync, offer_insights, optimize_basket, price_history, save_assistant, save_conversation, search_offers, seeded_offers
+from .repository import autocomplete_offers, browse_deals, compare_offers, conversation_context, latest_snapshot_date, latest_sync, offer_insights, optimize_basket, price_history, recent_conversation_history, save_assistant, save_conversation, search_offers, seeded_offers
 from .sync import run_sync
 
 settings = get_settings()
@@ -495,7 +495,8 @@ async def chat(request: ChatRequest):
         except PermissionError: raise HTTPException(404, "Không tìm thấy cuộc trò chuyện")
         yield event("conversation", {"conversation_id": cid})
         previous = conversation_context(cid)
-        intent = apply_conversation_context(await parse_intent(request.message, settings, previous), previous, request.message)
+        history = recent_conversation_history(cid, limit=5)
+        intent = apply_conversation_context(await parse_intent(request.message, settings, previous, history), previous, request.message)
         if intent.name == "clarification":
             answer = intent.clarification or "Bạn muốn tiếp tục tìm hoặc so sánh sản phẩm nào?"
             payload = {"intent": "clarification", "offers": [], "needs_clarification": True, "context": previous}

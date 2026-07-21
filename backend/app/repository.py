@@ -67,6 +67,28 @@ def conversation_context(conversation_id: str | None) -> dict:
     return context if isinstance(context, dict) else {}
 
 
+def recent_conversation_history(conversation_id: str | None, limit: int = 5) -> list[dict]:
+    """Read the last N raw chat messages for LLM prompt context."""
+    if not conversation_id:
+        return []
+    try:
+        uuid.UUID(str(conversation_id))
+    except (TypeError, ValueError, AttributeError):
+        return []
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT role, content
+                FROM messages
+                WHERE conversation_id = :id
+                ORDER BY id DESC
+                LIMIT :limit
+            """),
+            {"id": conversation_id, "limit": limit},
+        ).fetchall()
+    return [{"role": row.role, "content": row.content} for row in reversed(rows)]
+
+
 PROMOTION_FILTER = """(
     o.is_on_promotion OR o.is_price_discount OR o.has_promo_mechanic OR EXISTS (
         SELECT 1 FROM promotion_items_current pi

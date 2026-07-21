@@ -419,12 +419,23 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         needs_clarification=not bool(query),
         clarification="Bạn muốn tìm hoặc so sánh sản phẩm nào?" if not query else None,
     )
-async def parse_intent(message: str, settings: Settings, previous: dict[str, Any] | None = None) -> Intent:
+async def parse_intent(
+    message: str,
+    settings: Settings,
+    previous: dict[str, Any] | None = None,
+    history: list[dict] | None = None,
+) -> Intent:
     """Extract product/brand/retailer fields using Ollama LLM with historical context support."""
     deterministic = fallback_intent(message)
 
     context_str = ""
-    if previous:
+    if history:
+        history_lines = [
+            f"- {'Người dùng' if item.get('role') == 'user' else 'Trợ lý'}: \"{item.get('content')}\""
+            for item in history
+        ]
+        context_str = "\nLịch sử hội thoại gần nhất:\n" + "\n".join(history_lines) + "\n"
+    elif previous:
         prev_q = previous.get("query") or ""
         prev_ret = previous.get("retailers") or []
         context_str = f"\nLịch sử trò chuyện trước đó:\n- Sản phẩm đang tìm: '{prev_q}'\n- Siêu thị đã chọn: {prev_ret}\n"
