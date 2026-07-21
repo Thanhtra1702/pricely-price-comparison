@@ -106,7 +106,7 @@ def event(name: str, data: dict) -> str:
 
 def snapshot_context(offers: list[dict]) -> tuple[list[str], str]:
     dates = sorted({str(offer["snapshot_date"]) for offer in offers if offer.get("snapshot_date")})
-    return dates, f" Snapshot dữ liệu: {', '.join(dates)}." if dates else ""
+    return dates, f" (Dữ liệu cập nhật ngày {', '.join(dates)})." if dates else ""
 
 
 RETAILER_LABELS = {
@@ -307,6 +307,21 @@ def _answer_facts(intent: Intent, offers: list[dict]) -> list[dict]:
     ]
 
 
+def _has_fact_price(answer: str, facts: list[dict]) -> bool:
+    for fact in facts:
+        raw_price = str(fact.get("price") or "")
+        if not raw_price or raw_price == "không rõ giá":
+            continue
+        digits = re.sub(r"[^\d]", "", raw_price)
+        if not digits:
+            continue
+        formatted = f"{int(digits):,}".replace(",", ".")
+        price_k = f"{int(digits)//1000}k" if int(digits) >= 1000 and int(digits) % 1000 == 0 else ""
+        if formatted in answer or (price_k and price_k in answer.lower()) or raw_price in answer or digits in answer:
+            return True
+    return False
+
+
 async def _generate_grounded_answer(
     message: str, intent: Intent, offers: list[dict], fallback_answer: str,
 ) -> str | None:
@@ -345,8 +360,7 @@ async def _generate_grounded_answer(
             re.I,
         ):
             return None
-        known_prices = {_money(item.get("current_price")) for item in facts}
-        if not any(price in answer for price in known_prices if price != "không rõ giá"):
+        if not _has_fact_price(answer, facts):
             return None
         return answer
     except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError):
