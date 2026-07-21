@@ -412,7 +412,7 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         query = re.sub(r"\s+", " ", query).strip()
 
     # If this is a standalone query for a DIFFERENT product than the previous conversation,
-    # do NOT inherit old product brand, package, or budget filters.
+    # reset all previous brand, package, budget, retailer and promotion filters.
     is_new_product_search = bool(
         not qualifier_only
         and query
@@ -420,8 +420,22 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         and normalize_text(query) != normalize_text(previous_query)
     )
     if is_new_product_search:
-        new_name = "product_search" if intent.name in ("clarification", "compare_prices") else intent.name
-        return replace(intent, name=new_name)
+        new_name = "product_search" if intent.name in ("clarification", "compare_prices", "deals") else intent.name
+        return Intent(
+            name=new_name,
+            query=query,
+            product=intent.product or query,
+            brand=intent.brand,
+            package=intent.package,
+            retailers=intent.retailers,
+            min_price=intent.min_price,
+            max_price=intent.max_price,
+            min_discount_percent=intent.min_discount_percent,
+            promotion_only=intent.promotion_only,
+            comparison_unit=intent.comparison_unit,
+            unit_price_only=intent.unit_price_only,
+            data_quality=intent.data_quality,
+        )
 
     normalized_msg = normalize_text(message)
     asks_all_retailers = any(phrase in normalized_msg for phrase in (

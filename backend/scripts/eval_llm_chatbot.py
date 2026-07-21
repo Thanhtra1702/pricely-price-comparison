@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from typing import Any
 
 import httpx
@@ -20,14 +21,23 @@ def chat(client: httpx.Client, message: str, conversation_id: str | None = None)
     payload: dict[str, str] = {"message": message}
     if conversation_id:
         payload["conversation_id"] = conversation_id
-    response = client.post(f"{API}/api/chat/stream", json=payload, timeout=60)
-    response.raise_for_status()
     events: dict[str, dict[str, Any]] = {}
-    for block in response.text.strip().split("\n\n"):
-        lines = block.splitlines()
-        if len(lines) < 2 or not lines[0].startswith("event: ") or not lines[1].startswith("data: "):
-            continue
-        events[lines[0][7:]] = json.loads(lines[1][6:])
+    with client.stream("POST", f"{API}/api/chat/stream", json=payload, timeout=120.0) as response:
+        response.raise_for_status()
+        current_event = None
+        for line in response.iter_lines():
+            line = line.strip()
+            if line.startswith("event: "):
+                current_event = line[7:].strip()
+            elif line.startswith("data: "):
+                data_str = line[6:].strip()
+                if current_event:
+                    try:
+                        events[current_event] = json.loads(data_str)
+                    except Exception:
+                        pass
+                    if current_event == "done":
+                        break
     return events
 
 
@@ -69,9 +79,12 @@ def run_benchmark() -> int:
         previous_cid: str | None = None
 
         for idx, sc in enumerate(scenarios, 1):
+            if idx > 1:
+                time.sleep(1.0)
             cid = previous_cid if sc.get("requires_previous") else None
             try:
-                events = chat(client, sc["prompt"], cid)
+                with httpx.Client(timeout=120.0) as scenario_client:
+                    events = chat(scenario_client, sc["prompt"], cid)
             except Exception as exc:
                 print(f"[{idx}/{total}] FAIL: {sc['name']} -> HTTP Error: {exc}")
                 continue

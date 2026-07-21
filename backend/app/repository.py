@@ -338,10 +338,11 @@ def search_offers(
 
     rows = execute(base_filters + token_conditions, str(len(tokens)))
     if not rows:
-        # Natural-language cleanup occasionally retains a conversational word; retain
-        # the strongest multi-token candidates before declaring the product unavailable.
-        params["minimum_matches"] = min(2, len(tokens))
-        matches = " + ".join(match_terms)
+        # Require matching core product/brand tokens rather than arbitrary package tokens (like 1l or 180ml)
+        product_terms = [term for idx, term in enumerate(match_terms) if not re.match(r"^\d+(?:[a-z]+)?$", tokens[idx])]
+        eval_terms = product_terms if product_terms else match_terms
+        params["minimum_matches"] = min(2, len(eval_terms))
+        matches = " + ".join(eval_terms)
         rows = execute(base_filters + [f"({matches}) >= :minimum_matches"], f"({matches})")
     return _semantic_rerank(rows, query, settings)[:limit]
 

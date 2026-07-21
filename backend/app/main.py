@@ -671,7 +671,7 @@ async def chat(request: ChatRequest):
         except PermissionError: raise HTTPException(404, "Không tìm thấy cuộc trò chuyện")
         yield event("conversation", {"conversation_id": cid})
         previous = conversation_context(cid)
-        history = recent_conversation_history(cid, limit=5)
+        history = recent_conversation_history(cid, limit=2)
         intent = apply_conversation_context(await parse_intent(request.message, settings, previous, history), previous, request.message)
         if intent.name == "clarification":
             answer = intent.clarification or "Bạn muốn tiếp tục tìm hoặc so sánh sản phẩm nào?"
@@ -731,6 +731,9 @@ async def chat(request: ChatRequest):
         if not offers and fallback_query != intent.query:
             intent.query = fallback_query
             offers = _filter_chat_offers(_search_for_intent(intent), intent)
+        if not offers and intent.retailers:
+            intent_all_retailers = replace(intent, retailers=[])
+            offers = _filter_chat_offers(_search_for_intent(intent_all_retailers) if intent_all_retailers.query else _browse_for_intent(intent_all_retailers), intent_all_retailers)
         snapshot_dates, freshness = snapshot_context(offers)
         if intent.name == "compare_prices":
             reliable, near = compare_offers(offers)
