@@ -107,7 +107,7 @@ Through a modern Next.js interface, users can search the deals catalog and chat 
 - **Rule-validated Ollama intent parsing**: Accurately extracts brands, retailers, price bounds, and strict packaging constraints with multi-word noise phrase filtering (`QUERY_NOISE_PHRASES`) preserving short product terms (`chả giò`, `bánh bao`, `tương ớt cay`, `trà ô long`, `Bia 333`)
 - **Space-padded token matching & Hybrid search**: Combines space-padded SQL word matching for short terms ($\le 3$ chars) with `bge-m3` embeddings cosine similarity and full-text search (Reciprocal-Rank Fusion)
 - **Grounded LLM answers with safe fallback**: Ollama phrases only verified PostgreSQL facts; backend templates take over if the model is unavailable or invalid
-- **Memory-based session context**: Supports follow-up questions (e.g. "Còn Lotte thì sao?") using prior message payload context
+- **Memory-based session context**: Supports multi-turn follow-up questions (e.g. "Còn Lotte thì sao?", "ở lottemart không có sao") by preserving preceding product context while dynamically updating retailer and packaging filters
 - **📈 Price Trend Alerts**: Dynamically tracks the 7-day historical price movement of recommended items and displays day-to-day fluctuations
 - **🛒 Direct Basket Actions**: Auto-adds recommended items to the cart or automatically triggers cart optimization/viewing upon request
 - **⚠️ Data Quality Warnings**: Flags matching products that have data quality warnings to ensure purchase confidence

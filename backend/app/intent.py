@@ -94,6 +94,8 @@ QUERY_NOISE_PHRASES = (
     "tim kiem", "chung ta", "mat hang", "thi sao", "don vi", "gia tot",
     "xac minh", "tin cay", "chi lay", "con lai", "them vao", "gio hang",
     "toi uu", "du lieu", "danh sach", "chua co", "khong co", "co dua",
+    "khong co sao", "co sao", "sao khong", "co khong", "co ban", "gia sao",
+    "the sao", "the con", "o dau", "co o", "khong a", "co a",
 )
 
 # Single noise words describing the query/conversational filler.
@@ -105,7 +107,7 @@ QUERY_NOISE = frozenset(
     "khi la lam nao nay nhat o oi re uu ve voi xem "
     "giam duoc khong toi minh muon mua tim xin hay giup "
     "mot loai cung it duoi tren toi da qua khoang tu theo "
-    "valid warning mon".split()
+    "valid warning mon sao ban sau".split()
 )
 
 _PACKAGE_RE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lit)\b", re.I)
@@ -163,7 +165,7 @@ def _tokens(message: str) -> list[str]:
 
 def clean_query(message: str) -> str:
     """Return only product-bearing words from the original user message."""
-    return " ".join(_tokens(message)) or _remove_retailer_names(normalize_text(message)).strip()
+    return " ".join(_tokens(message))
 
 
 def _query_with_package(message: str, package: str | None, unit_price_only: bool) -> str:
@@ -301,7 +303,9 @@ def _looks_like_follow_up(message: str, intent: Intent) -> bool:
     text = normalize_text(message)
     if intent.name in {"clarification", "basket"}:
         return True
-    markers = ("con ", "the con", "the sao", "chi lay", "chi can", "loai ", "cai nay", "cai dau", "san pham nay", "o lotte", "o winmart", "o go", "o bhx")
+    if intent.retailers:
+        return True
+    markers = ("con ", "the con", "the sao", "chi lay", "chi can", "loai ", "cai nay", "cai dau", "san pham nay", "o ", "tai ", "ben ")
     return text.startswith(markers)
 
 
@@ -311,6 +315,8 @@ def infer_name(message: str) -> IntentName:
     action = _basket_action(message)
     if action != "none":
         return "basket"
+    if not clean_query(message) and (_retailers_in(message) or normalized.startswith(("con", "the", "chi", "loai", "o ", "tai ", "ben "))):
+        return "clarification"
     if normalized.startswith(("con ", "the con", "the sao", "chi lay", "chi can", "loai ", "cai nay", "cai dau", "san pham nay")):
         return "clarification"
     if any(phrase in normalized for phrase in ("uu dai", "khuyen mai", "giam gia")) or words & {"promotion", "deal", "sale"}:
