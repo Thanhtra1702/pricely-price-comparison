@@ -122,6 +122,7 @@ def _add_common_offer_filters(
     comparison_unit: str | None = None,
     unit_price_only: bool = False,
     data_quality: str = "all",
+    name_phrases: list[str] | None = None,
 ) -> None:
     """Compose parameterised marketplace filters without interpolating user input."""
     if retailer_id:
@@ -133,12 +134,28 @@ def _add_common_offer_filters(
 
     for index, token in enumerate(_tokens(query)):
         key = f"query_token_{index}"
-        filters.append(f"(o.normalized_name LIKE :{key} OR o.normalized_brand LIKE :{key})")
-        params[key] = f"%{token}%"
+        if len(token) <= 3:
+            filters.append(f"(concat(' ', o.normalized_name, ' ') LIKE :{key} OR concat(' ', o.normalized_brand, ' ') LIKE :{key})")
+            params[key] = f"% {token} %"
+        else:
+            filters.append(f"(o.normalized_name LIKE :{key} OR o.normalized_brand LIKE :{key})")
+            params[key] = f"%{token}%"
     for index, token in enumerate(_tokens(brand)):
         key = f"brand_token_{index}"
-        filters.append(f"o.normalized_brand LIKE :{key}")
-        params[key] = f"%{token}%"
+        # Gold may leave brand empty even though the retailer product name
+        # contains it (for example many Vinamilk rows).  Requiring only the
+        # dimension field turns a valid natural-language brand query into zero
+        # results, so accept the same normalized token in the product name.
+        if len(token) <= 3:
+            filters.append(f"(concat(' ', o.normalized_brand, ' ') LIKE :{key} OR concat(' ', o.normalized_name, ' ') LIKE :{key})")
+            params[key] = f"% {token} %"
+        else:
+            filters.append(f"(o.normalized_brand LIKE :{key} OR o.normalized_name LIKE :{key})")
+            params[key] = f"%{token}%"
+    for index, phrase in enumerate(name_phrases or []):
+        key = f"name_phrase_{index}"
+        filters.append(f"o.normalized_name LIKE :{key}")
+        params[key] = f"%{normalize_text(phrase)}%"
 
     if min_price is not None:
         filters.append("o.current_price >= :min_price")
@@ -249,6 +266,7 @@ def search_offers(
         comparison_unit=extra.get("comparison_unit"),
         unit_price_only=bool(extra.get("unit_price_only")),
         data_quality=extra.get("data_quality", "all"),
+        name_phrases=extra.get("name_phrases"),
     )
     if promotion_only:
         base_filters.append(PROMOTION_FILTER)
@@ -259,10 +277,14 @@ def search_offers(
     match_terms: list[str] = []
     for index, token in enumerate(tokens):
         key = f"search_token_{index}"
-        condition = f"(o.normalized_name LIKE :{key} OR o.normalized_brand LIKE :{key})"
+        if len(token) <= 3:
+            condition = f"(concat(' ', o.normalized_name, ' ') LIKE :{key} OR concat(' ', o.normalized_brand, ' ') LIKE :{key})"
+            params[key] = f"% {token} %"
+        else:
+            condition = f"(o.normalized_name LIKE :{key} OR o.normalized_brand LIKE :{key})"
+            params[key] = f"%{token}%"
         token_conditions.append(condition)
         match_terms.append(f"CASE WHEN {condition} THEN 1 ELSE 0 END")
-        params[key] = f"%{token}%"
 
     order_by = {
         "relevance": "matched_terms DESC, quality_rank ASC, search_score DESC, o.current_price ASC",
@@ -812,3 +834,12 @@ def latest_sync() -> dict | None:
     with engine.connect() as conn:
         row = conn.execute(text("SELECT id::text,status,started_at,finished_at,details FROM sync_runs ORDER BY started_at DESC LIMIT 1")).first()
         return dict(row._mapping) if row else None
+
+
+def latest_snapshot_date() -> str | None:
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT max(snapshot_date)::text FROM offers_current")).scalar()
+            return str(row) if row else None
+    except Exception:
+        return None

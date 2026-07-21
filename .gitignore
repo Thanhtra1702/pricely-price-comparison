@@ -35,3 +35,12 @@ pnpm-debug.log*
 # Operating-system files
 .DS_Store
 Thumbs.db
+
+# Documentation & Presentation Scripts
+DEMO_PRESENTATION_SCRIPT.md
+SYSTEM_ARCHITECTURE.md
+
+# Tests & Test Scripts
+backend/tests/
+backend/scripts/
+tests/

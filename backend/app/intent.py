@@ -33,6 +33,7 @@ class Intent:
     comparison_unit: str | None = None
     unit_price_only: bool = False
     data_quality: str | None = None
+    name_phrases: list[str] | None = None
     sort: str = "relevance"
     basket_action: BasketAction = "none"
     needs_clarification: bool = False
@@ -50,6 +51,7 @@ class Intent:
                 "comparison_unit": self.comparison_unit,
                 "unit_price_only": self.unit_price_only or None,
                 "data_quality": self.data_quality,
+                "name_phrases": self.name_phrases,
             }.items()
             if value is not None
         }
@@ -69,6 +71,7 @@ class Intent:
             "comparison_unit": self.comparison_unit,
             "unit_price_only": self.unit_price_only,
             "data_quality": self.data_quality,
+            "name_phrases": self.name_phrases,
             "sort": self.sort,
         }
         if offer_ids:
@@ -85,19 +88,36 @@ RETAILER_ALIASES: dict[str, tuple[str, ...]] = {
     "winmart": ("win mart", "winmart", "win mart plus"),
 }
 
-# These terms describe the request, not the product. Keeping them in database
-# search made a query such as "sữa Vinamilk nào rẻ nhất" much less likely to
-# match. Product packaging tokens such as 1l/500g deliberately remain.
+# Multi-word noise phrases that describe intent/actions rather than products.
+QUERY_NOISE_PHRASES = (
+    "bao nhieu", "san pham", "so sanh", "uu dai", "khuyen mai", "giam gia",
+    "tim kiem", "chung ta", "mat hang", "thi sao", "don vi", "gia tot",
+    "xac minh", "tin cay", "chi lay", "con lai", "them vao", "gio hang",
+    "toi uu", "du lieu", "danh sach", "chua co", "khong co", "co dua",
+)
+
+# Single noise words describing the query/conversational filler.
+# Note: words like "gio" (giò/giỏ), "cay" (cay), "bao" (bao), "mat" (mát),
+# "lieu" (liệu), "tin" (tin), "xac" (xác), "don" (đơn), "tot" (tốt) are omitted
+# so they are not stripped when present in product names (e.g., "chả giò", "tương ớt cay", "bánh bao").
 QUERY_NOISE = frozenset(
-    "a anh bao ban bao nhieu cac cai can cho co cua de den gia giua hang hay "
-    "khi la lam nao nay nhat o oi re san pham so sanh uu uu ve voi xem "
-    "uu dai khuyen mai giam duoc khong toi minh chung ta muon mua tim kiem xin hay giup "
-    "mot loai mat hang thi sao cung it duoi tren toi da qua khoang tu theo don vi "
-    "gia tot valid warning xac minh tin cay chi lay con lai the them vao sach gio "
-    "hang mua toi uu du lieu mon".split()
+    "a anh ban cac cai can cho co cua de den gia giua hang hay "
+    "khi la lam nao nay nhat o oi re uu ve voi xem "
+    "giam duoc khong toi minh muon mua tim xin hay giup "
+    "mot loai cung it duoi tren toi da qua khoang tu theo "
+    "valid warning mon".split()
 )
 
 _PACKAGE_RE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lit)\b", re.I)
+# A user often states the size of each item in a bundle ("lốc 4 hộp ...
+# 180ml").  The offer's sellable quantity is 720ml, not 180ml, so retain the
+# multiplier for strict package filtering while keeping 180ml searchable.
+_MULTIPACK_RE = re.compile(
+    r"\b(?:loc\s*)?(\d+)\s*(?:hop|chai|goi|lon|cai)\b"
+    r"(?:(?!\b\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|lit)\b).){0,80}?"
+    r"\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lit)\b",
+    re.I,
+)
 _PERCENT_RE = re.compile(r"\b(?:giam\s*)?(?:tren|tu|it nhat)?\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:%|phan tram)\b", re.I)
 _MONEY_RE = re.compile(
     r"\b(?P<amount>\d{1,3}(?:[\s.,]\d{3})+|\d+(?:[.,]\d+)?)\s*(?P<suffix>k|nghin|ngan|d|dong|vnd)\b",
@@ -122,13 +142,21 @@ def _remove_retailer_names(text: str) -> str:
 
 
 def _tokens(message: str) -> list[str]:
-    text = _remove_retailer_names(normalize_text(message))
+    raw_norm = normalize_text(message)
+    # Remove raw money mentions (e.g. 150.000đ) before tokenizing so number fragments don't leak into query
+    cleaned_message = _MONEY_RE.sub(" ", raw_norm)
+    text = _remove_retailer_names(cleaned_message)
+    for phrase in QUERY_NOISE_PHRASES:
+        text = re.sub(rf"\b{re.escape(phrase)}\b", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    words = text.split()
     tokens: list[str] = []
-    for token in text.split():
-        # Budget values should not become a product query. Leave 1 and 2 alone:
-        # users often use them as a product/packaging qualifier.
-        is_money_fragment = (token.endswith(("k", "d")) and token[:-1].isdigit()) or (token.isdigit() and len(token) >= 3)
-        if token not in QUERY_NOISE and not is_money_fragment:
+    for token in words:
+        is_money_suffix = token.endswith(("k", "d")) and token[:-1].isdigit()
+        is_large_number = token.isdigit() and len(token) >= 5
+        is_money_fragment = is_money_suffix or is_large_number
+        is_noise = token in QUERY_NOISE and not (token == "o" and "long" in words)
+        if not is_noise and not is_money_fragment:
             tokens.append(token)
     return tokens
 
@@ -142,7 +170,9 @@ def _query_with_package(message: str, package: str | None, unit_price_only: bool
     """Keep a package in the searchable form used by normalized product names."""
     query = clean_query(message)
     if package:
-        query = _PACKAGE_RE.sub(package, query)
+        # Product names generally contain each-item size (180ml), rather than
+        # the normalized bundle total (4x180ml). Keep that lexical signal.
+        query = _PACKAGE_RE.sub(package.split("x", 1)[-1], query)
     if unit_price_only:
         # In "giá theo lít", the second "lít" describes the requested comparison
         # unit rather than the product. The package itself has already been preserved.
@@ -193,7 +223,13 @@ def _price_bounds(message: str) -> tuple[float | None, float | None]:
 
 
 def _package(message: str) -> str | None:
-    match = _PACKAGE_RE.search(normalize_text(message))
+    normalized = normalize_text(message)
+    multipack = _MULTIPACK_RE.search(normalized)
+    if multipack:
+        quantity = multipack.group(2).replace(",", ".")
+        unit = "l" if multipack.group(3).lower() == "lit" else multipack.group(3).lower()
+        return f"{int(multipack.group(1))}x{quantity}{unit}"
+    match = _PACKAGE_RE.search(normalized)
     if not match:
         return None
     quantity = match.group(1).replace(",", ".")
@@ -221,6 +257,18 @@ def _data_quality(message: str) -> str | None:
     if any(phrase in text for phrase in ("canh bao", "warning")):
         return "warning"
     return None
+
+
+def _name_phrases(message: str) -> list[str]:
+    """Keep product-defining phrases that token cleanup would otherwise lose.
+
+    Accent-insensitive normalization makes "có" (sweetened) and "Cô" in a
+    brand look alike.  Phrase filters preserve meaningful variants such as
+    "có đường" without making conversational filler part of the search query.
+    """
+    text = normalize_text(message)
+    phrases = ("khong duong", "it duong", "co duong", "socola", "chocolate", "dau", "vi dau")
+    return [phrase for phrase in phrases if re.search(rf"\b{re.escape(phrase)}\b", text)]
 
 
 def _discount_threshold(message: str) -> float | None:
@@ -294,6 +342,7 @@ def fallback_intent(message: str) -> Intent:
         comparison_unit=comparison_unit,
         unit_price_only=unit_price_only,
         data_quality=_data_quality(message),
+        name_phrases=_name_phrases(message),
         sort="unit_price" if unit_price_only else "relevance",
         basket_action=_basket_action(message),
         needs_clarification=name == "clarification" and not clean_query(message),
@@ -330,9 +379,11 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
     if qualifier_only and previous_query:
         query = previous_query
         if current_package and previous_package and current_package != previous_package:
-            query = re.sub(rf"\b{re.escape(previous_package)}\b", " ", query)
-        if current_package and current_package not in query.split():
-            query = f"{query} {current_package}"
+            previous_token = previous_package.split("x", 1)[-1]
+            query = re.sub(rf"\b{re.escape(previous_token)}\b", " ", query)
+        current_token = current_package.split("x", 1)[-1] if current_package else None
+        if current_token and current_token not in query.split():
+            query = f"{query} {current_token}"
         query = re.sub(r"\s+", " ", query).strip()
 
     return replace(
@@ -349,6 +400,7 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         comparison_unit=intent.comparison_unit or previous.get("comparison_unit"),
         unit_price_only=intent.unit_price_only or bool(previous.get("unit_price_only")),
         data_quality=intent.data_quality or previous.get("data_quality"),
+        name_phrases=intent.name_phrases or previous.get("name_phrases"),
         sort="unit_price" if intent.unit_price_only or previous.get("unit_price_only") else intent.sort,
         needs_clarification=not bool(query),
         clarification="Bạn muốn tìm hoặc so sánh sản phẩm nào?" if not query else None,
@@ -418,5 +470,7 @@ async def parse_intent(message: str, settings: Settings) -> Intent:
         query=safe_model_query or deterministic.query,
         retailers=deterministic.retailers or model_retailers,
         brand=model_brand or deterministic.brand,
-        package=model_package or deterministic.package,
+        # A deterministic multipack keeps its multiplier; an LLM commonly
+        # extracts only the per-item size and would otherwise loosen filtering.
+        package=deterministic.package or model_package,
     )

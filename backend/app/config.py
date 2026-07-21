@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     minio_prefix: str = "gold"
     ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "qwen2.5:3b"
+    ollama_answer_generation: bool = True
+    ollama_answer_timeout_seconds: int = 15
     embedding_model: str = "bge-m3:latest"
     embedding_batch_size: int = 24
     embedding_timeout_seconds: int = 60

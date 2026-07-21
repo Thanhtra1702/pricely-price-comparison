@@ -104,9 +104,9 @@ Through a modern Next.js interface, users can search the deals catalog and chat 
 
 ### 🤖 AI Chatbot Assistant
 - **Natural language support**: Chat and search in natural Vietnamese
-- **Rule-validated Ollama intent parsing**: Accurately extracts brands, retailers, price bounds, and strict packaging constraints
-- **Semantic + Lexical hybrid search**: Combines `bge-m3` embeddings cosine similarity with SQL full-text search (Reciprocal-Rank Fusion)
-- **Factual template-driven answers**: Safely builds text responses using verified PostgreSQL data (protects against hallucinations and SQL injection)
+- **Rule-validated Ollama intent parsing**: Accurately extracts brands, retailers, price bounds, and strict packaging constraints with multi-word noise phrase filtering (`QUERY_NOISE_PHRASES`) preserving short product terms (`chả giò`, `bánh bao`, `tương ớt cay`, `trà ô long`, `Bia 333`)
+- **Space-padded token matching & Hybrid search**: Combines space-padded SQL word matching for short terms ($\le 3$ chars) with `bge-m3` embeddings cosine similarity and full-text search (Reciprocal-Rank Fusion)
+- **Grounded LLM answers with safe fallback**: Ollama phrases only verified PostgreSQL facts; backend templates take over if the model is unavailable or invalid
 - **Memory-based session context**: Supports follow-up questions (e.g. "Còn Lotte thì sao?") using prior message payload context
 - **📈 Price Trend Alerts**: Dynamically tracks the 7-day historical price movement of recommended items and displays day-to-day fluctuations
 - **🛒 Direct Basket Actions**: Auto-adds recommended items to the cart or automatically triggers cart optimization/viewing upon request
@@ -154,7 +154,7 @@ Through a modern Next.js interface, users can search the deals catalog and chat 
 | 📏 **Strict Package Matching** | Ensures queries specifying a size (e.g. `1L`) strictly match product sizes, filtering out mismatched packages |
 | 📊 **Price Volatility Trends** | Displays day-to-day price movement over the last 7 to 90 days for specific products |
 | 🎯 **Match Confidence** | Displays semantic similarity confidence scores for cross-supermarket item mapping |
-| 🛡️ **Hallucination Protection** | Fully template-driven response generation using verified PostgreSQL records (Ollama cannot invent prices) |
+| 🛡️ **Hallucination Protection** | LLM receives only verified, post-ranking facts and has no SQL/data access; backend uses a deterministic template when generation fails validation |
 
 ---
 
