@@ -396,11 +396,15 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
             query = f"{query} {current_token}"
         query = re.sub(r"\s+", " ", query).strip()
 
+    normalized_msg = normalize_text(message)
+    asks_all_retailers = any(phrase in normalized_msg for phrase in ("cac sieu thi", "sieu thi khac", "cac cua hang", "cua hang khac"))
+    target_retailers = [] if asks_all_retailers else (intent.retailers or list(previous.get("retailers") or []))
+
     return replace(
         intent,
         name=previous_name if intent.name == "clarification" else intent.name,
         query=query,
-        retailers=intent.retailers or list(previous.get("retailers") or []),
+        retailers=target_retailers,
         promotion_only=intent.promotion_only or bool(previous.get("promotion_only")),
         brand=intent.brand or previous.get("brand"),
         package=current_package or previous_package,
