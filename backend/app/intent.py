@@ -100,6 +100,10 @@ QUERY_NOISE_PHRASES = (
     "o dau ban", "o dau co", "co ban a", "khong ban a", "sieu thi khac",
     "cac sieu thi khac", "cac sieu thi", "sieu thi", "cua hang khac", "cac cua hang",
     "o cac sieu thi khac", "o sieu thi khac",
+    "noi nao khac", "noi khac", "co noi nao khac", "noi nao khac ngoai",
+    "cho nao khac", "cho khac", "co cho nao khac",
+    "ngoai bach hoa xanh", "ngoai go", "ngoai lotte", "ngoai lottemart",
+    "ngoai winmart", "ngoai mm", "ngoai mega market",
 )
 
 # Single noise words describing the query/conversational filler.
@@ -111,7 +115,8 @@ QUERY_NOISE = frozenset(
     "khi la lam nao nay nhat o oi re uu ve voi xem "
     "giam duoc khong toi minh muon mua tim xin hay giup "
     "mot loai cung it duoi tren toi da qua khoang tu theo "
-    "valid warning mon sao ban sau ha nhi nhe nha day do u".split()
+    "valid warning mon sao ban sau ha nhi nhe nha day do u "
+    "ngoai khac vay".split()
 )
 
 _PACKAGE_RE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lit)\b", re.I)
@@ -316,6 +321,8 @@ def _looks_like_follow_up(message: str, intent: Intent) -> bool:
 def infer_name(message: str) -> IntentName:
     normalized = normalize_text(message)
     words = set(normalized.split())
+    if any(phrase in normalized for phrase in ("thoi tiet", "chinh tri", "viet code", "lam toan", "tam su", "suc khoe y te", "the thao")):
+        return "out_of_scope"
     action = _basket_action(message)
     if action != "none":
         return "basket"
@@ -372,20 +379,28 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         # The browser owns the actual local basket. Preserve the last offer ids so
         # it can resolve "thêm món này" when there was a single result.
         return intent
+
+    previous_query = str(previous.get("query") or "").strip()
+    previous_package = str(previous.get("package") or "").strip() or None
+    current_package = intent.package
+    query = intent.query
+
     if not _looks_like_follow_up(message, intent):
         return intent
 
     previous_name = previous.get("name")
     if previous_name not in {"product_search", "compare_prices", "deals"}:
         previous_name = "product_search"
-    previous_query = str(previous.get("query") or "").strip()
-    previous_package = str(previous.get("package") or "").strip() or None
-    current_package = intent.package
 
-    query = intent.query
-    # A retailer-only reply ("còn Lotte thì sao?") or a qualifier-only reply
-    # ("chỉ loại 1 kg") continues the preceding product search.
-    qualifier_only = intent.name == "clarification" or not query or query in {"loai", "chi", "con"}
+    # A reply is qualifier-only if there is no non-retailer product query, or if it only specifies a retailer/package modifier.
+    retailer_words = {"lotte", "lottemart", "bachhoaxanh", "go", "winmart", "mmvietnam", "mm"}
+    non_retailer_query = " ".join(w for w in query.split() if w not in retailer_words)
+    qualifier_only = (
+        not non_retailer_query
+        or non_retailer_query in {"loai", "chi", "con"}
+        or (bool(current_package) and non_retailer_query == current_package)
+        or (bool(_retailers_in(message)) and not non_retailer_query)
+    )
     if qualifier_only and previous_query:
         query = previous_query
         if current_package and previous_package and current_package != previous_package:
@@ -396,8 +411,25 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
             query = f"{query} {current_token}"
         query = re.sub(r"\s+", " ", query).strip()
 
+    # If this is a standalone query for a DIFFERENT product than the previous conversation,
+    # do NOT inherit old product brand, package, or budget filters.
+    is_new_product_search = bool(
+        not qualifier_only
+        and query
+        and previous_query
+        and normalize_text(query) != normalize_text(previous_query)
+    )
+    if is_new_product_search:
+        new_name = "product_search" if intent.name in ("clarification", "compare_prices") else intent.name
+        return replace(intent, name=new_name)
+
     normalized_msg = normalize_text(message)
-    asks_all_retailers = any(phrase in normalized_msg for phrase in ("cac sieu thi", "sieu thi khac", "cac cua hang", "cua hang khac"))
+    asks_all_retailers = any(phrase in normalized_msg for phrase in (
+        "cac sieu thi", "sieu thi khac", "cac cua hang", "cua hang khac",
+        "noi nao khac", "noi khac", "cho nao khac", "cho khac",
+        "ngoai bach hoa xanh", "ngoai go", "ngoai lotte", "ngoai lottemart",
+        "ngoai winmart", "ngoai mm", "ngoai mega market",
+    ))
     target_retailers = [] if asks_all_retailers else (intent.retailers or list(previous.get("retailers") or []))
 
     return replace(
@@ -452,9 +484,11 @@ async def parse_intent(
         '  "retailers": ["mảng id siêu thị được nêu: bachhoaxanh, go, lottemart, mmvietnam, winmart"]\n'
         "}\n\n"
         "Quy tắc quan trọng:\n"
-        "1. Loại bỏ hoàn toàn các từ giao tiếp, hư từ, câu hỏi đuôi (như 'hả', 'sao', 'không có bán hả', 'có không', 'ạ', 'nhỉ').\n"
-        "2. Nếu đây là câu hỏi nối tiếp về siêu thị khác (ví dụ: 'ở lottemart không có sao', 'Ở GO không có bán hả', 'ở các siêu thị khác không có bán sao'), "
-        "hãy KẾ THỪA tên sản phẩm từ Lịch sử trò chuyện và trích xuất siêu thị mới. Nếu hỏi 'các siêu thị khác', giữ nguyên tên sản phẩm và đặt retailers: [].\n"
+        "1. Các câu hỏi hỏi giá thông thường (ví dụ: 'Sữa Vinamilk giá bao nhiêu?', 'tìm giá dầu ăn') thuộc name: \"product_search\". "
+        "Chỉ dùng \"compare_prices\" khi người dùng dùng từ 'so sánh' hoặc hỏi 'chỗ nào rẻ nhất', 'ở đâu bán rẻ nhất'.\n"
+        "2. Nếu đây là câu hỏi nối tiếp về siêu thị khác cho CÙNG sản phẩm (ví dụ: 'còn lotte thì sao', 'ở GO không có bán hả'), kế thừa sản phẩm cũ. "
+        "NHƯNG nếu người dùng hỏi sang một SẢN PHẨM MỚI (ví dụ: 'vậy có sting không?', 'còn nước giặt thì sao?'), đây là yêu cầu tìm kiếm sản phẩm mới, "
+        "phải đặt name: \"product_search\" và product: tên sản phẩm mới, KHÔNG kế thừa name: \"compare_prices\" từ sản phẩm cũ.\n"
         "3. Nếu câu hỏi HOÀN TOÀN KHÔNG liên quan đến mua sắm, giá cả, sản phẩm tiêu dùng, siêu thị hay tạp hóa "
         "(ví dụ: hỏi thời tiết, viết code, làm toán, tâm sự, chính trị, y tế chuyên sâu...), trả về name: \"out_of_scope\" và product: null.\n"
         "4. Trả về định dạng JSON hợp lệ duy nhất, không kèm giải thích.\n\n"
@@ -480,7 +514,7 @@ async def parse_intent(
         package = _package(str(data.get("package") or ""))
         query = " ".join(part for part in (product, brand, package) if part)
         name = data.get("name")
-        valid_names = {"product_search", "compare_prices", "deals", "clarification", "basket"}
+        valid_names = {"product_search", "compare_prices", "deals", "clarification", "basket", "out_of_scope"}
         return query, brand, package, retailers, name if name in valid_names else None
 
     try:

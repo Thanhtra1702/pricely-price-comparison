@@ -1,4 +1,67 @@
-import asyncio, datetime, json, re, uuid
+from __future__ import annotations
+import asyncio, datetime, json, os, re, uuid
+
+FEW_SHOT_EXAMPLES = (
+    "VÍ DỤ MẪU CHUẨN (FEW-SHOT EXAMPLES):\n"
+    "Ví dụ 1:\n"
+    "  FACTS: [{\"product_name\": \"Sữa Vinamilk 1L\", \"retailer_name\": \"WinMart\", \"price\": \"30.000đ\", \"discount\": \"10%\"}]\n"
+    "  Câu hỏi: \"Sữa Vinamilk giá bao nhiêu?\"\n"
+    "  Mẫu trả lời tốt: \"Dạ em thấy Sữa Vinamilk 1L tại WinMart đang có giá tốt nhất là 30.000đ (đang giảm 10%). Bạn có thể tham khảo mua tại siêu thị WinMart gần nhất nhé! 😊\"\n\n"
+    "Ví dụ 2:\n"
+    "  FACTS: [{\"product_name\": \"Dầu ăn Neptune 1L\", \"retailer_name\": \"GO!\", \"price\": \"54.500đ\"}, {\"product_name\": \"Dầu ăn Neptune 1L\", \"retailer_name\": \"Lotte Mart\", \"price\": \"58.000đ\"}]\n"
+    "  Câu hỏi: \"So sánh giá dầu ăn Neptune giữa GO! và Lotte Mart\"\n"
+    "  Mẫu trả lời tốt: \"Dạ qua so sánh, Dầu ăn Neptune 1L tại GO! có giá tốt hơn là 54.500đ, rẻ hơn so với Lotte Mart đang bán 58.000đ. Bạn mua ở GO! sẽ tiết kiệm được 3.500đ nhé!\"\n\n"
+    "Ví dụ 3:\n"
+    "  FACTS: [{\"product_name\": \"Nước giặt OMO 3kg\", \"retailer_name\": \"Bách Hóa Xanh\", \"price\": \"145.000đ\", \"discount\": \"25%\"}]\n"
+    "  Câu hỏi: \"Có ưu đãi nước giặt nào trên 20% không?\"\n"
+    "  Mẫu trả lời tốt: \"Dạ tại Bách Hóa Xanh đang có ưu đãi Nước giặt OMO 3kg giảm đến 25%, giá chỉ còn 145.000đ. Đây là mức giảm rất tốt để bạn mua sắm đợt này ạ.\"\n\n"
+)
+
+
+async def _generate_grounded_answer(
+    message: str, intent: Intent, offers: list[dict], fallback_answer: str,
+) -> str | None:
+    """Ask Ollama to phrase verified facts in warm, friendly, non-technical Vietnamese."""
+    if not settings.ollama_answer_generation or not offers:
+        return None
+    facts = _answer_facts(intent, offers)
+    prompt = (
+        "Bạn là Trợ lý PriceLy thân thiện, ấm áp và chu đáo giúp người dùng so sánh giá siêu thị.\n"
+        "Hãy trả lời người dùng bằng giọng văn tự nhiên, lịch sự, dễ hiểu với người tiêu dùng bình thường (xưng 'Em', gọi người dùng là 'Bạn' hoặc 'Anh/Chị').\n"
+        "KHÔNG DÙNG ngôn ngữ kỹ thuật hoặc thuật ngữ máy tính (như 'snapshot', 'data quality', 'valid', 'facts', 'query', 'database', 'SQL').\n\n"
+        f"{FEW_SHOT_EXAMPLES}"
+        "Chỉ dựa vào danh sách sản phẩm thực tế đã xác minh dưới đây:\n"
+        f"FACTS:\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
+        "Câu hỏi người dùng:\n"
+        f"{json.dumps(message, ensure_ascii=False)}\n\n"
+        "Yêu cầu:\n"
+        "1. Trả lời ngắn gọn, nêu rõ tên siêu thị thực tế và sản phẩm có giá tốt nhất.\n"
+        "2. Giữ nguyên đúng giá trị tiền tệ và phần trăm giảm giá trong FACTS.\n"
+        "3. Trả về đúng 1 JSON object có dạng {\"answer\": \"câu trả lời tự nhiên của bạn\"}.\n"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=settings.ollama_answer_timeout_seconds) as client:
+            response = await client.post(
+                f"{settings.ollama_base_url}/api/generate",
+                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
+            )
+            response.raise_for_status()
+        data = json.loads(response.json()["response"])
+        answer = data.get("answer")
+        if not isinstance(answer, str):
+            return None
+        answer = re.sub(r"\s+", " ", answer).strip()
+        if not 8 <= len(answer) <= 800 or re.search(
+            r"\b(select|insert|update|delete|sql|json|prompt)\b|\bt[aấ]t c[aả]\b|\bm[oọ]i\b|kh[oô]ng \w+ cung c[aấ]p",
+            answer,
+            re.I,
+        ):
+            return None
+        if not _has_fact_price(answer, facts):
+            return None
+        return answer
+    except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
 from contextlib import asynccontextmanager
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -367,6 +430,119 @@ async def _generate_grounded_answer(
         return None
 
 
+async def _evaluate_llm_answer(
+    message: str, intent: Intent, answer: str, facts: list[dict]
+) -> tuple[bool, float, dict[str, float], str]:
+    """Ask Ollama to evaluate candidate `answer` on Grounding, Relevance, Tone, Completeness (1-5 scale)."""
+    if not settings.ollama_answer_evaluation:
+        return True, 5.0, {"grounding": 5.0, "relevance": 5.0, "tone": 5.0, "completeness": 5.0}, "Evaluation disabled"
+    if not answer or not message:
+        return False, 0.0, {"grounding": 0.0, "relevance": 0.0, "tone": 0.0, "completeness": 0.0}, "Empty answer or message"
+
+    prompt = (
+        "Bạn là Chuyên gia Đánh giá (LLM-as-a-Judge) cho hệ thống chatbot mua sắm PriceLy.\n"
+        "Hãy chấm điểm CÂU TRẢ LỜI dựa trên CÂU HỎI NGƯỜI DÙNG và DỮ LIỆU THỰC TẾ (FACTS).\n\n"
+        f"DỮ LIỆU THỰC TẾ (FACTS):\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
+        f"CÂU HỎI NGƯỜI DÙNG:\n{json.dumps(message, ensure_ascii=False)}\n\n"
+        f"CÂU TRẢ LỜI CẦN ĐÁNH GIÁ:\n{json.dumps(answer, ensure_ascii=False)}\n\n"
+        "Hãy chấm điểm từ 1 đến 5 cho 4 tiêu chí sau:\n"
+        "1. grounding: Mức độ trung thực với FACTS (không tự bịa giá, phần trăm giảm giá hay siêu thị).\n"
+        "2. relevance: Mức độ trả lời trực tiếp đúng sản phẩm người dùng hỏi (nếu nêu được giá sản phẩm đúng trong FACTS thì điểm relevance >= 4.0).\n"
+        "3. tone: Giọng văn thân thiện (xưng Em, gọi Bạn/Anh/Chị), tự nhiên, không từ ngữ kỹ thuật.\n"
+        "4. completeness: Thông tin đầy đủ, rõ ràng về giá và siêu thị tốt nhất.\n\n"
+        "Trả về duy nhất 1 JSON object có dạng:\n"
+        "{\n"
+        '  "grounding": 1.0 đến 5.0,\n'
+        '  "relevance": 1.0 đến 5.0,\n'
+        '  "tone": 1.0 đến 5.0,\n'
+        '  "completeness": 1.0 đến 5.0,\n'
+        '  "feedback": "gợi ý cải thiện ngắn gọn nếu có"\n'
+        "}\n"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=settings.ollama_eval_timeout_seconds) as client:
+            response = await client.post(
+                f"{settings.ollama_base_url}/api/generate",
+                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
+            )
+            response.raise_for_status()
+        data = json.loads(response.json()["response"])
+        g = float(data.get("grounding", 3.0))
+        r = float(data.get("relevance", 3.0))
+        t = float(data.get("tone", 4.0))
+        c = float(data.get("completeness", 3.0))
+        metrics = {"grounding": g, "relevance": r, "tone": t, "completeness": c}
+        avg_score = round((g + r + t + c) / 4.0, 2)
+        feedback = str(data.get("feedback") or ("Đạt yêu cầu đánh giá" if avg_score >= settings.ollama_eval_pass_score else "Cần cải thiện độ chính xác và mức độ đáp ứng câu hỏi"))
+        passed = (avg_score >= settings.ollama_eval_pass_score) and (g >= 3.0) and (r >= 3.0)
+        return passed, avg_score, metrics, feedback
+    except Exception as exc:
+        return False, 0.0, {"grounding": 0.0, "relevance": 0.0, "tone": 0.0, "completeness": 0.0}, f"Lỗi khi đánh giá hoặc quá thời gian: {exc}"
+
+
+async def _refine_llm_answer(
+    message: str, intent: Intent, candidate_answer: str, facts: list[dict], feedback: str
+) -> str | None:
+    """Ask LLM to self-refine candidate_answer using feedback from the LLM Evaluator."""
+    if not settings.ollama_answer_generation or not facts:
+        return None
+
+    prompt = (
+        "Bạn là Trợ lý PriceLy. Câu trả lời ban đầu của bạn chưa đạt yêu cầu đánh giá chất lượng.\n"
+        f"GỢI Ý CẢI THIỆN TỪ CHUYÊN GIA:\n\"{feedback}\"\n\n"
+        f"DỮ LIỆU THỰC TẾ (FACTS):\n{json.dumps(facts, ensure_ascii=False, default=str)}\n\n"
+        f"CÂU HỎI NGƯỜI DÙNG:\n{json.dumps(message, ensure_ascii=False)}\n\n"
+        f"CÂU TRẢ LỜI CỦ:\n{json.dumps(candidate_answer, ensure_ascii=False)}\n\n"
+        "Hãy viết lại một CÂU TRẢ LỜI MỚI hoàn chỉnh, tự nhiên, thân thiện (xưng 'Em', gọi 'Bạn' hoặc 'Anh/Chị'), "
+        "khắc phục hoàn toàn các điểm chưa tốt ở câu trả lời cũ và bám sát FACTS.\n\n"
+        "Trả về đúng 1 JSON object dạng {\"answer\": \"câu trả lời cải thiện của bạn\"}.\n"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=settings.ollama_answer_timeout_seconds) as client:
+            response = await client.post(
+                f"{settings.ollama_base_url}/api/generate",
+                json={"model": settings.ollama_model, "prompt": prompt, "format": "json", "stream": False},
+            )
+            response.raise_for_status()
+        data = json.loads(response.json()["response"])
+        refined = data.get("answer")
+        if not isinstance(refined, str):
+            return None
+        refined = re.sub(r"\s+", " ", refined).strip()
+        if not 8 <= len(refined) <= 800 or re.search(
+            r"\b(select|insert|update|delete|sql|json|prompt)\b|\bt[aấ]t c[aả]\b|\bm[oọ]i\b",
+            refined,
+            re.I,
+        ):
+            return None
+        if not _has_fact_price(refined, facts):
+            return None
+        return refined
+    except Exception:
+        return None
+
+
+def _log_evaluation_result(cid: str, message: str, intent: Intent, answer: str, eval_result: dict) -> None:
+    """Append evaluation event to backend/logs/eval_history.jsonl for continuous tracking."""
+    try:
+        log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "eval_history.jsonl")
+        entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "conversation_id": cid,
+            "message": message,
+            "intent": intent.name,
+            "query": intent.query,
+            "answer_snippet": answer[:200],
+            "eval_result": eval_result,
+        }
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 @app.get("/api/health")
 async def health():
     database = "ok"
@@ -594,13 +770,40 @@ async def chat(request: ChatRequest):
             payload = {"intent": intent.name, "offers": selected, "retailer_count": len({x['retailer_id'] for x in selected}), "snapshot_dates": snapshot_dates}
         payload["filters"] = intent.filters()
         payload["context"] = intent.context_payload(_offer_ids(selected))
+        facts = _answer_facts(intent, selected)
         generated_answer = await _generate_grounded_answer(request.message, intent, selected, answer)
         if generated_answer:
-            answer = generated_answer
-            payload["answer_source"] = "llm_grounded"
+            passed, score, metrics, feedback = await _evaluate_llm_answer(request.message, intent, generated_answer, facts)
+            refined_used = False
+            if not passed and settings.ollama_max_refine_attempts > 0:
+                refined_candidate = await _refine_llm_answer(request.message, intent, generated_answer, facts, feedback)
+                if refined_candidate:
+                    ref_passed, ref_score, ref_metrics, ref_feedback = await _evaluate_llm_answer(request.message, intent, refined_candidate, facts)
+                    if ref_score >= score:
+                        generated_answer = refined_candidate
+                        passed, score, metrics, feedback = ref_passed, ref_score, ref_metrics, ref_feedback
+                        refined_used = True
+
+            payload["eval_result"] = {
+                "passed": passed,
+                "score": score,
+                "metrics": metrics,
+                "feedback": feedback,
+                "refined": refined_used,
+            }
+            if passed:
+                answer = generated_answer
+                payload["answer_source"] = "llm_grounded_evaluated"
+            else:
+                answer = (
+                    "Dạ em tìm thấy một số sản phẩm liên quan bên dưới, nhưng câu trả lời tự động chưa đảm bảo giải đáp chính xác câu hỏi của bạn. "
+                    "Bạn có thể thử điều chỉnh câu hỏi rõ hơn (ví dụ: nêu thương hiệu, quy cách hoặc siêu thị cụ thể) để em hỗ trợ tốt hơn nhé! 😊"
+                )
+                payload["answer_source"] = "llm_eval_failed_fallback_notice"
         else:
             payload["answer_source"] = "template_fallback"
         save_assistant(cid, answer, payload)
+        _log_evaluation_result(cid, request.message, intent, answer, payload.get("eval_result", {}))
         yield event("answer", {"content": answer})
         yield event("results", payload)
         yield event("done", {})

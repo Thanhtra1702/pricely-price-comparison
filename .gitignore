@@ -40,7 +40,7 @@ Thumbs.db
 DEMO_PRESENTATION_SCRIPT.md
 SYSTEM_ARCHITECTURE.md
 
-# Tests & Test Scripts
-backend/tests/
-backend/scripts/
-tests/
+# Logs & temporary files
+backend/logs/
+.kilo/
+

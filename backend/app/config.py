@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:3b"
     ollama_answer_generation: bool = True
     ollama_answer_timeout_seconds: int = 15
+    ollama_answer_evaluation: bool = True
+    ollama_eval_timeout_seconds: int = 10
+    ollama_eval_pass_score: float = 3.5
+    ollama_max_refine_attempts: int = 1
     embedding_model: str = "bge-m3:latest"
     embedding_batch_size: int = 24
     embedding_timeout_seconds: int = 60
