@@ -8,7 +8,7 @@ import httpx
 from .config import Settings
 from .matching import normalize_text
 
-IntentName = Literal["product_search", "compare_prices", "deals", "clarification", "basket"]
+IntentName = Literal["product_search", "compare_prices", "deals", "clarification", "basket", "out_of_scope"]
 BasketAction = Literal["none", "add", "view", "optimize"]
 
 
@@ -445,7 +445,7 @@ async def parse_intent(
         f"{context_str}"
         "Hãy phân tích câu hỏi của người dùng và trả về JSON duy nhất theo schema:\n"
         "{\n"
-        '  "name": "product_search" | "compare_prices" | "deals" | "clarification" | "basket",\n'
+        '  "name": "product_search" | "compare_prices" | "deals" | "clarification" | "basket" | "out_of_scope",\n'
         '  "product": "tên sản phẩm/nhóm sản phẩm (ví dụ: khẩu trang, sữa Vinamilk)",\n'
         '  "brand": "thương hiệu hoặc null",\n'
         '  "package": "quy cách (ví dụ: 1L, 180ml, 1kg) hoặc null",\n'
@@ -455,7 +455,9 @@ async def parse_intent(
         "1. Loại bỏ hoàn toàn các từ giao tiếp, hư từ, câu hỏi đuôi (như 'hả', 'sao', 'không có bán hả', 'có không', 'ạ', 'nhỉ').\n"
         "2. Nếu đây là câu hỏi nối tiếp về siêu thị khác (ví dụ: 'ở lottemart không có sao', 'Ở GO không có bán hả', 'ở các siêu thị khác không có bán sao'), "
         "hãy KẾ THỪA tên sản phẩm từ Lịch sử trò chuyện và trích xuất siêu thị mới. Nếu hỏi 'các siêu thị khác', giữ nguyên tên sản phẩm và đặt retailers: [].\n"
-        "3. Trả về định dạng JSON hợp lệ duy nhất, không kèm giải thích.\n\n"
+        "3. Nếu câu hỏi HOÀN TOÀN KHÔNG liên quan đến mua sắm, giá cả, sản phẩm tiêu dùng, siêu thị hay tạp hóa "
+        "(ví dụ: hỏi thời tiết, viết code, làm toán, tâm sự, chính trị, y tế chuyên sâu...), trả về name: \"out_of_scope\" và product: null.\n"
+        "4. Trả về định dạng JSON hợp lệ duy nhất, không kèm giải thích.\n\n"
         f"Câu hỏi người dùng: \"{message}\""
     )
     raw = ""

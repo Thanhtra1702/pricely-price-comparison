@@ -505,6 +505,21 @@ async def chat(request: ChatRequest):
             yield event("results", payload)
             yield event("done", {})
             return
+        if intent.name == "out_of_scope":
+            answer = (
+                "Dạ em là Trợ lý PriceLy, chuyên giúp bạn tìm giá tốt và so sánh sản phẩm "
+                "tại các siêu thị như Bách Hóa Xanh, GO!, Lotte Mart, WinMart và MM Mega Market. 😊\n\n"
+                "Bạn cần em tìm giá sản phẩm nào không ạ? Ví dụ:\n"
+                "• \"Sữa Vinamilk 1L giá bao nhiêu?\"\n"
+                "• \"So sánh giá dầu ăn ở các siêu thị\"\n"
+                "• \"Có ưu đãi gì đang giảm trên 30% không?\""
+            )
+            payload = {"intent": "out_of_scope", "offers": [], "context": previous}
+            save_assistant(cid, answer, payload)
+            yield event("answer", {"content": answer})
+            yield event("results", payload)
+            yield event("done", {})
+            return
         if intent.name == "product_search" and not intent.query:
             answer = "Bạn muốn tìm sản phẩm nào? Ví dụ: “so sánh sữa Vinamilk 1L”, “dầu ăn dưới 100.000đ” hoặc “ưu đãi giảm trên 20%”."
             payload = {"intent": "clarification", "offers": [], "needs_clarification": True, "context": previous}
