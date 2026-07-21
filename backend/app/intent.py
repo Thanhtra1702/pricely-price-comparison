@@ -97,7 +97,9 @@ QUERY_NOISE_PHRASES = (
     "khong co sao", "co sao", "sao khong", "co khong", "co ban", "gia sao",
     "the sao", "the con", "o dau", "co o", "khong a", "co a", "khong co ban",
     "khong ban ha", "khong co ban ha", "co ban ha", "co ban khong", "khong ha",
-    "o dau ban", "o dau co", "co ban a", "khong ban a",
+    "o dau ban", "o dau co", "co ban a", "khong ban a", "sieu thi khac",
+    "cac sieu thi khac", "cac sieu thi", "sieu thi", "cua hang khac", "cac cua hang",
+    "o cac sieu thi khac", "o sieu thi khac",
 )
 
 # Single noise words describing the query/conversational filler.
@@ -436,8 +438,8 @@ async def parse_intent(message: str, settings: Settings, previous: dict[str, Any
         "}\n\n"
         "Quy tắc quan trọng:\n"
         "1. Loại bỏ hoàn toàn các từ giao tiếp, hư từ, câu hỏi đuôi (như 'hả', 'sao', 'không có bán hả', 'có không', 'ạ', 'nhỉ').\n"
-        "2. Nếu đây là câu hỏi nối tiếp về siêu thị/quy cách khác (ví dụ: 'ở lottemart không có sao', 'Ở GO không có bán hả', 'còn WinMart thì sao'), "
-        "hãy KẾ THỪA tên sản phẩm từ Lịch sử trò chuyện và trích xuất siêu thị mới vào danh sách retailers.\n"
+        "2. Nếu đây là câu hỏi nối tiếp về siêu thị khác (ví dụ: 'ở lottemart không có sao', 'Ở GO không có bán hả', 'ở các siêu thị khác không có bán sao'), "
+        "hãy KẾ THỪA tên sản phẩm từ Lịch sử trò chuyện và trích xuất siêu thị mới. Nếu hỏi 'các siêu thị khác', giữ nguyên tên sản phẩm và đặt retailers: [].\n"
         "3. Trả về định dạng JSON hợp lệ duy nhất, không kèm giải thích.\n\n"
         f"Câu hỏi người dùng: \"{message}\""
     )
