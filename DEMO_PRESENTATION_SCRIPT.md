@@ -1,90 +1,65 @@
-# 🎤 Kịch Bản Thuyết Trình Song Song Demo Sản Phẩm PriceLy
+# 🎤 Kịch Bản Thuyết Trình Demo Sản Phẩm PriceLy
 
-> Tài liệu này được thiết kế để bạn vừa trình chiếu/thao tác giao diện (Demo), vừa nói (Lời thoại) theo kịch bản từng bước chuyên nghiệp.
-
----
-
-## 📌 Tổng Quan Chương Trình Thuyết Trình
-
-* **Tên sản phẩm:** PriceLy — Nền tảng so sánh giá & săn ưu đãi siêu thị thời gian thực bằng AI.
-* **Thời lượng kiến nghị:** 5 – 10 phút.
-* **Chuẩn bị môi trường trước khi Demo:**
-  1. Đã bật Docker backend + PostgreSQL + Frontend (`http://localhost:3000`).
-  2. Đã bật Ollama (Qwen 2.5 3B).
-  3. Mở sẵn trình duyệt ở trang chủ `http://localhost:3000`.
+> Tài liệu này là kịch bản lời thoại dành cho người thuyết trình. Cấu trúc được chia theo từng tính năng, mỗi tính năng gồm 2 phần: **Giới thiệu chức năng (Mặt người dùng)** và **Giải thích kỹ thuật (Under the hood)**.
 
 ---
 
-## 🎬 Kịch Bản Chi Tiết (Thao Tác + Lời Thoại)
-
-### 🟢 PHẦN 1: Mở đầu & Khám phá Ưu đãi (Deals Explorer)
-⏱ **Thời lượng:** 1 - 2 phút
-
-| Thao tác trên màn hình | 🗣️ Lời thoại thuyết trình |
-| :--- | :--- |
-| **1.** Mở trang chủ `http://localhost:3000`. Lướt chuột qua Banner carousel của các siêu thị. | *"Kính chào thầy cô và các bạn. Hôm nay em xin đại diện nhóm trình bày sản phẩm **PriceLy** — giải pháp giúp người tiêu dùng Việt Nam tìm kiếm, so sánh giá và tối ưu chi phí mua sắm tạp hóa hàng ngày trên các chuỗi siêu thị lớn nhất hiện nay gồm Bách Hóa Xanh, GO!, Lotte Mart, WinMart và MM Mega Market."* |
-| **2.** Trỏ vào các thẻ sản phẩm (Product Cards) trên Deals Explorer. | *"Giao diện đầu tiên quý vị nhìn thấy là **Deals Explorer**. Tại đây, hệ thống liên tục cập nhật các chương trình khuyến mãi, giảm giá từ các siêu thị. Mỗi thẻ sản phẩm đều hiển thị minh bạch giá hiện tại, giá gốc, phần trăm giảm giá và đặc biệt là **đơn giá chuẩn** (tính theo đ/g hoặc đ/ml) để người mua dễ dàng nhận biết đâu là deal thật sự hời."* |
-| **3.** Thử chọn các bộ lọc: Chọn siêu thị GO!, lọc giảm giá trên 10%. | *"Người dùng có thể dễ dàng lọc sản phẩm theo siêu thị, thương hiệu, khoảng giá hoặc mức phần trăm giảm giá mong muốn với tốc độ phản hồi tức thì."* |
+## 📌 MỞ ĐẦU
+**🗣️ Lời thoại:** 
+"Kính chào thầy cô và các bạn. Hôm nay em xin đại diện nhóm trình bày sản phẩm **PriceLy** — Nền tảng so sánh giá & săn ưu đãi siêu thị thời gian thực bằng AI. Giải pháp của chúng em giúp người tiêu dùng Việt Nam tìm kiếm, so sánh giá và tối ưu chi phí mua sắm tạp hóa hàng ngày trên các chuỗi siêu thị lớn nhất hiện nay gồm Bách Hóa Xanh, GO!, Lotte Mart, WinMart và MM Mega Market."
 
 ---
 
-### 🔵 PHẦN 2: Trợ Lý AI Chatbot So Sánh Giá Thông Minh
-⏱ **Thời lượng:** 2 - 3 phút
+## 🎯 TÍNH NĂNG 1: DEALS EXPLORER (KHÁM PHÁ ƯU ĐÃI)
+*(Vừa nói vừa lướt trang chủ, trỏ vào các thẻ sản phẩm và dùng bộ lọc)*
 
-| Thao tác trên màn hình | 🗣️ Lời thoại thuyết trình |
-| :--- | :--- |
-| **1.** Nhấp vào Mascot Trợ lý PriceLy ở góc dưới bên phải để mở **Chatbot Overlay Panel**. | *"Điểm nổi bật nhất của PriceLy chính là **Trợ lý AI So Sánh Giá Thông Minh**. Thay vì phải tìm kiếm thủ công, người dùng có thể trò chuyện bằng ngôn ngữ tự nhiên Tiếng Việt."* |
-| **2.** Gõ câu hỏi: **`tôi muốn mua chả giò`** hoặc nhấp vào suggestion card. Press Enter. | *"Em xin demo với một câu hỏi quen thuộc: 'tôi muốn mua chả giò'. Hệ thống sử dụng bộ lọc ý định (Intent Parser) hai lớp thông minh. Chatbot tự động loại bỏ các từ giao tiếp thừa, nhận diện chính xác tên sản phẩm 'chả giò' mà không bị nuốt từ hay nhầm lẫn với các từ ngắn khác."* |
-| **3.** Chỉ vào kết quả trả về: Danh sách Chả Giò xếp theo giá tăng dần, kèm ngày Snapshot. | *"Ngay lập tức, Chatbot truy vấn cơ sở dữ liệu serving, sắp xếp các lựa chọn chả giò từ giá thấp nhất đến cao nhất. Đồng thời, hệ thống minh bạch thời điểm cập nhật dữ liệu (Snapshot date) để người dùng yên tâm trước khi đi mua."* |
-| **4.** Gõ câu hỏi tiếp theo (Follow-up): **`So sánh giá sữa Vinamilk 1L giữa WinMart và GO`** | *"Chatbot cũng hỗ trợ so sánh giá chính xác giữa các siêu thị cụ thể với quy cách nghiêm ngặt. Hệ thống sẽ áp dụng bộ quy tắc để đảm bảo chỉ so sánh đúng dung tích 1L."* |
-| **5.** Gõ câu hỏi về ưu đãi: **`có khuyến mãi nào giảm trên 20% không?`** | *"Để tìm kiếm các cơ hội săn sale, khi em hỏi 'có khuyến mãi nào giảm trên 20% không?', chatbot sẽ ngay lập tức truy xuất mức giảm giá lớn nhất, tự động làm tròn số (như 25%) và trả lời người dùng một cách thân thiện, lễ phép với cấu trúc chuẩn 'Dạ em'."* |
-| **6.** Chỉ vào chỉ báo xu hướng giá (**Price Trend Alerts**): *"Giá thấp nhất ghi nhận đang giữ nguyên so với 2026-07-17"*. | *"Ngoài ra, Chatbot còn phân tích chuỗi lịch sử giá 7 ngày gần nhất để đưa ra cảnh báo xu hướng — giúp người dùng biết giá sản phẩm đang tăng, giảm hay giữ nguyên."* |
+### 1. Giới thiệu chức năng
+**🗣️ Lời thoại:** 
+"Giao diện đầu tiên quý vị nhìn thấy là **Deals Explorer**. Tại đây, hệ thống liên tục cập nhật các chương trình khuyến mãi, giảm giá từ các siêu thị. Mỗi thẻ sản phẩm đều hiển thị minh bạch giá hiện tại, giá gốc, phần trăm giảm giá và đặc biệt là **đơn giá chuẩn** (tính theo đ/g hoặc đ/ml) để người mua dễ dàng nhận biết đâu là deal thật sự hời. Người dùng có thể dễ dàng lọc sản phẩm theo siêu thị, khoảng giá hoặc mức phần trăm giảm giá mong muốn với tốc độ phản hồi tức thì."
 
-> 💡 **Điểm nhấn kĩ thuật cần nhấn mạnh (LLM Pipeline):** *"Hệ thống áp dụng cơ chế **Grounded LLM với mô hình Đánh Giá Tự Động (LLM-as-a-Judge)**. 
-> 1. Mô hình ngôn ngữ chỉ đóng vai trò diễn đạt câu trả lời từ các sự thật (Facts) đã được backend xác minh 100%. 
-> 2. Trước khi hiển thị cho người dùng, một mô hình LLM thứ hai sẽ đóng vai trò Giám Khảo (Judge) để chấm điểm câu trả lời về tính chính xác (Grounding) và văn phong (Tone). 
-> 3. Nếu điểm dưới chuẩn hoặc xảy ra quá thời gian (Timeout), hệ thống có cơ chế Fallback tự động trả về câu trả lời an toàn, đảm bảo tuyệt đối không bao giờ bịa đặt hay ảo giác giá cả (0% Hallucination)."*
+### 2. Yếu tố kỹ thuật
+**🗣️ Lời thoại:** 
+"Để có được dữ liệu mượt mà và đầy đủ thế này, đằng sau PriceLy là một hệ thống **Data Lakehouse (Medallion Architecture)** mạnh mẽ:
+* Dữ liệu được thu thập tự động hàng ngày bằng các Playwright crawlers.
+* Chuyển qua các bước xử lý làm sạch (Bronze $\rightarrow$ Silver $\rightarrow$ Gold) thông qua PySpark & Apache Hudi, lưu trữ trên MinIO S3 Storage.
+* Cuối cùng, dữ liệu sạch được đẩy lên PostgreSQL 16. Việc tìm kiếm diễn ra tức thì nhờ tận dụng sức mạnh của Full-Text Search trong Postgres."
 
 ---
 
-### 🟡 PHẦN 3: Tối Ưu Hóa Giỏ Hàng Nhiều Siêu Thị (Basket Optimizer)
-⏱ **Thời lượng:** 2 phút
+## 🤖 TÍNH NĂNG 2: TRỢ LÝ AI SO SÁNH GIÁ THÔNG MINH
+*(Mở Chatbot lên, thử gõ: "tôi muốn mua chả giò", sau đó "So sánh giá sữa Vinamilk 1L giữa WinMart và GO")*
 
-| Thao tác trên màn hình | 🗣️ Lời thoại thuyết trình |
-| :--- | :--- |
-| **1.** Nhấp nút **"+ Thêm vào giỏ"** tại 2 - 3 sản phẩm trên màn hình chat hoặc thẻ sản phẩm. | *"Khi người dùng muốn chuẩn bị danh sách mua sắm cho tuần mới, họ chỉ cần thêm các món hàng cần mua vào Giỏ hàng."* |
-| **2.** Mở Modal **Giỏ Hàng (Basket Optimizer)** từ thanh Navigation hoặc câu lệnh Chat *"Tối ưu giỏ hàng"*. | *"Tính năng **Basket Optimizer** sẽ giải bài toán tối ưu chi phí mua sắm phức tạp bằng thuật toán phân tích:"* |
-| **3.** Chỉ vào phương án **"Mua tại 1 siêu thị" (Single-Retailer Option)**. | *"**Phương án 1 - Mua tại 1 siêu thị:** Giúp người dùng chọn ra đúng 1 siêu thị duy nhất có tổng hóa đơn rẻ nhất cho toàn bộ danh sách hàng hóa — tiết kiệm tối đa thời gian và công sức di chuyển."* |
-| **4.** Chỉ vào phương án **"Chia đơn rẻ nhất" (Split-Order Option)**. | *"**Phương án 2 - Chia đơn tiết kiệm nhất:** Hệ thống sẽ tự động tách danh sách món hàng sang từng siêu thị đang bán món đó với giá rẻ nhất — giúp tối ưu chi phí tuyệt đối."* |
+### 1. Giới thiệu chức năng
+**🗣️ Lời thoại:** 
+"Điểm nổi bật nhất của PriceLy chính là **Trợ lý AI Chatbot**. Người dùng không cần bấm tìm thủ công mà chỉ cần chat bằng ngôn ngữ tự nhiên Tiếng Việt. 
+Ví dụ, khi em gõ *'tôi muốn mua chả giò'*, chatbot lập tức trả về danh sách xếp theo giá từ thấp đến cao, kèm ngày cập nhật dữ liệu. Khi em yêu cầu khó hơn: *'So sánh giá sữa Vinamilk 1L giữa WinMart và GO'* — hệ thống bắt buộc kiểm tra đúng dung tích 1L, trả về câu trả lời tự nhiên, thân thiện và kèm theo phân tích xu hướng giá 7 ngày gần nhất để xem giá đang tăng hay giảm."
 
----
-
-### 🟣 PHẦN 4: Kiến Trúc Hạ Tầng & Data Pipeline (Under the Hood)
-⏱ **Thời lượng:** 1 phút
-
-| Thao tác trên màn hình | 🗣️ Lời thoại thuyết trình |
-| :--- | :--- |
-| **1.** Chiếu Slide hoặc sơ đồ hệ thống trong `README.md` / `SYSTEM_ARCHITECTURE.md`. | *"Về mặt kỹ thuật, PriceLy được xây dựng trên hạ tầng dữ liệu hiện đại:* |
-| **2.** Giải thích ngắn gọn các tầng công nghệ. | *- **Data Lakehouse (Medallion Architecture):** Dữ liệu thu thập tự động qua Playwright crawlers, xử lý làm sạch qua PySpark & Apache Hudi (Bronze $\rightarrow$ Silver $\rightarrow$ Gold) lưu trữ trên MinIO S3 Storage.*<br/>*- **Serving Layer:** PostgreSQL 16 kết hợp Full-Text Search và Vector Embedding (`bge-m3`).*<br/>*- **Backend & Frontend:** FastAPI Python async kết hợp Next.js 15 App Router đem lại trải nghiệm mượt mà, phản hồi tức thì."* |
+### 2. Yếu tố kỹ thuật
+**🗣️ Lời thoại:** 
+"Về mặt kỹ thuật, xử lý ngôn ngữ tự nhiên luôn có rủi ro mô hình tự 'bịa' ra giá (Hallucination). Để giải quyết triệt để, chúng em thiết kế một **LLM Pipeline** khép kín với cơ chế **Grounded LLM**:
+1. **Intent Parser (Phân loại ý định):** Bóc tách chính xác ý định và bộ lọc của người dùng trước khi truy vấn DB.
+2. **Grounded Generation:** Mô hình LLM (Ollama) chỉ được dùng để 'diễn đạt' lại các sự thật (Facts) đã được backend truy xuất từ database, không được tự suy diễn.
+3. **LLM-as-a-Judge & Fallback:** Trước khi hiển thị cho người dùng, một mô hình LLM đóng vai trò 'Giám khảo' sẽ chấm điểm độ chính xác và văn phong của câu trả lời. Nếu phát hiện bịa đặt hoặc quá thời gian xử lý, hệ thống kích hoạt cơ chế Fallback an toàn (Template_based) — đảm bảo **0% Hallucination**."
 
 ---
 
-### 🔴 PHẦN 5: Kết Luận & Q&A
-⏱ **Thời lượng:** 30 giây
+## 🛒 TÍNH NĂNG 3: BỘ TỐI ƯU HÓA GIỎ HÀNG (BASKET OPTIMIZER)
+*(Thêm vài sản phẩm vào giỏ, mở giỏ hàng và ấn Tối ưu hóa)*
 
-| Thao tác trên màn hình | 🗣️ Lời thoại thuyết trình |
-| :--- | :--- |
-| Quay lại màn hình giao diện PriceLy. | *"Tóm lại, PriceLy không chỉ là một công cụ so sánh giá, mà là một trợ lý mua sắm thông minh toàn diện giúp người tiêu dùng tiết kiệm thời gian và tiền bạc. Em xin chân thành cảm ơn thầy cô và các bạn đã chú ý theo dõi. Em xin sẵn sàng nhận các câu hỏi góp ý ạ!"* |
+### 1. Giới thiệu chức năng
+**🗣️ Lời thoại:** 
+"Khi người dùng chuẩn bị danh sách mua sắm cho tuần mới, họ chỉ cần thêm các món hàng vào Giỏ hàng. Bài toán đặt ra là: Mua ở đâu rẻ nhất? Tính năng **Basket Optimizer** sẽ đưa ra 2 phương án:
+* **Phương án 1 (Mua tại 1 siêu thị):** Giúp người dùng chọn ra đúng 1 siêu thị duy nhất có tổng hóa đơn rẻ nhất cho toàn bộ danh sách, tiết kiệm công sức đi lại.
+* **Phương án 2 (Chia đơn tiết kiệm nhất):** Hệ thống tự động tách các món hàng sang từng siêu thị đang bán rẻ nhất để tối ưu chi phí tuyệt đối."
+
+### 2. Yếu tố kỹ thuật
+**🗣️ Lời thoại:** 
+"Điểm khó nhất của tính năng này là các siêu thị thường đặt tên sản phẩm khác nhau (ví dụ: 'Mì Hảo Hảo Tôm Chua Cay 75g' và 'Mì ăn liền Hảo Hảo 75g'). Để matching chúng, hệ thống sử dụng **Vector Embedding (`bge-m3`)** chạy cục bộ. Bằng cách tính độ tương đồng của Vector khoảng cách và kết hợp các quy tắc so sánh dung tích/khối lượng, hệ thống gom nhóm chính xác các sản phẩm tương đương trên các sàn khác nhau, từ đó thuật toán tối ưu hóa mới có thể tính toán chính xác."
 
 ---
 
-## 🛠️ Bộ Câu Hỏi Q&A Thường Gặp & Cách Trả Lời
+## 🚀 TỔNG KẾT & Q&A
+**🗣️ Lời thoại:** 
+"Tóm lại, với Frontend là Next.js 15 và Backend FastAPI Python bất đồng bộ, kết hợp hạ tầng dữ liệu Data Lakehouse tiên tiến, PriceLy không chỉ là một trang web so sánh giá, mà là một **trợ lý mua sắm thông minh toàn diện**.
 
-1. **Q: Chatbot có bị ảo giác (hallucination) tự bịa ra giá sai không?**
-   * **A:** *"Dạ không. Chatbot của PriceLy tuân thủ nguyên tắc Grounded AI. Backend thực hiện lọc SQL và xếp hạng giá trước, sau đó chỉ gửi đúng các dòng Fact verified sang cho LLM diễn đạt lại. Nếu LLM lỗi hoặc trả về giá khác dữ liệu thực, backend sẽ tự động chuyển sang câu trả lời TemplateFallback đảm bảo chính xác 100%."*
-
-2. **Q: Nếu siêu thị đổi giá trong ngày thì dữ liệu có cập nhật không?**
-   * **A:** *"Dạ dữ liệu được cập nhật theo các phiên đồng bộ (Snapshot) hàng ngày. Mỗi câu trả lời của Chatbot đều đính kèm ngày Snapshot dữ liệu để người dùng chủ động kiểm tra."*
-
-3. **Q: Người dùng gõ Tiếng Việt không dấu Chatbot có hiểu không?**
-   * **A:** *"Dạ hiểu hoàn toàn. Hệ thống có bộ chuẩn hóa `normalize_text` xử lý cả 2 chuẩn mã hóa Unicode (NFC/NFD) và chuyển về dạng ASCII khi truy vấn, nên người dùng gõ có dấu hay không dấu đều nhận được kết quả chính xác như nhau."*
+Em xin chân thành cảm ơn thầy cô và các bạn đã chú ý theo dõi. Em xin sẵn sàng nhận các câu hỏi góp ý ạ!"
