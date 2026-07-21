@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from collections import defaultdict
 from typing import Any
@@ -6,7 +7,7 @@ from typing import Any
 from sqlalchemy import text
 
 from .database import engine
-from .matching import normalize_text
+from .matching import normalize_text, signature
 
 
 def save_conversation(message: str, conversation_id: str | None = None) -> str:
@@ -833,7 +834,7 @@ def compare_offers(offers: list[dict]) -> tuple[list[dict], list[dict]]:
     for offer in offers:
         canonical_id = offer.get("canonical_product_id")
         if canonical_id:
-            canonical_groups.setdefault(canonical_id, []).append(offer)
+            canonical_groups.setdefault(str(canonical_id), []).append(offer)
     comparable_groups = [
         group for group in canonical_groups.values() if len({item["retailer_id"] for item in group}) >= 2
     ]
@@ -843,14 +844,31 @@ def compare_offers(offers: list[dict]) -> tuple[list[dict], list[dict]]:
         for offer in reliable:
             offer["match_confidence"] = 1.0
         near = [offer for offer in offers if offer["price_snapshot_id"] not in reliable_ids]
-        return sorted(reliable, key=lambda item: item["current_price"]), near
-    # Name/package similarity is useful for discovery, but is not evidence that two
-    # records are the exact same sellable SKU. Keep those rows explicitly separate
-    # until Gold provides a canonical mapping.
+        return sorted(reliable, key=lambda item: float(item["current_price"])), near
+
+    # Signature matching fallback when canonical_product_id is unlinked across retailers
+    sig_groups: dict[tuple, list[dict]] = defaultdict(list)
+    for offer in offers:
+        sig = signature(offer.get("product_name"), offer.get("brand"))
+        if sig.quantity and sig.unit:
+            key = (sig.normalized_brand or normalize_text(str(offer.get("brand") or "")), sig.quantity, sig.unit)
+            sig_groups[key].append(offer)
+
+    sig_comparable = [
+        group for group in sig_groups.values() if len({item["retailer_id"] for item in group}) >= 2
+    ]
+    if sig_comparable:
+        reliable = max(sig_comparable, key=lambda group: (len({item["retailer_id"] for item in group}), len(group)))
+        reliable_ids = {item["price_snapshot_id"] for item in reliable}
+        for offer in reliable:
+            offer["match_confidence"] = 0.90
+        near = [offer for offer in offers if offer["price_snapshot_id"] not in reliable_ids]
+        return sorted(reliable, key=lambda item: float(item["current_price"])), near
+
     for offer in offers:
         offer["match_confidence"] = None
         offer["match_type"] = "similar"
-    return [], sorted(offers, key=lambda item: item["current_price"])
+    return [], sorted(offers, key=lambda item: float(item["current_price"]))
 
 
 def latest_sync() -> dict | None:
