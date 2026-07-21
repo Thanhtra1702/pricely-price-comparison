@@ -95,7 +95,9 @@ QUERY_NOISE_PHRASES = (
     "xac minh", "tin cay", "chi lay", "con lai", "them vao", "gio hang",
     "toi uu", "du lieu", "danh sach", "chua co", "khong co", "co dua",
     "khong co sao", "co sao", "sao khong", "co khong", "co ban", "gia sao",
-    "the sao", "the con", "o dau", "co o", "khong a", "co a",
+    "the sao", "the con", "o dau", "co o", "khong a", "co a", "khong co ban",
+    "khong ban ha", "khong co ban ha", "co ban ha", "co ban khong", "khong ha",
+    "o dau ban", "o dau co", "co ban a", "khong ban a",
 )
 
 # Single noise words describing the query/conversational filler.
@@ -107,7 +109,7 @@ QUERY_NOISE = frozenset(
     "khi la lam nao nay nhat o oi re uu ve voi xem "
     "giam duoc khong toi minh muon mua tim xin hay giup "
     "mot loai cung it duoi tren toi da qua khoang tu theo "
-    "valid warning mon sao ban sau".split()
+    "valid warning mon sao ban sau ha nhi nhe nha day do u".split()
 )
 
 _PACKAGE_RE = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|lit)\b", re.I)
