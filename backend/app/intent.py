@@ -413,17 +413,33 @@ def apply_conversation_context(intent: Intent, previous: dict[str, Any] | None, 
         needs_clarification=not bool(query),
         clarification="Bạn muốn tìm hoặc so sánh sản phẩm nào?" if not query else None,
     )
-
-
-async def parse_intent(message: str, settings: Settings) -> Intent:
-    """Extract product/brand fields with Ollama, with deterministic validation."""
+async def parse_intent(message: str, settings: Settings, previous: dict[str, Any] | None = None) -> Intent:
+    """Extract product/brand/retailer fields using Ollama LLM with historical context support."""
     deterministic = fallback_intent(message)
+
+    context_str = ""
+    if previous:
+        prev_q = previous.get("query") or ""
+        prev_ret = previous.get("retailers") or []
+        context_str = f"\nLịch sử trò chuyện trước đó:\n- Sản phẩm đang tìm: '{prev_q}'\n- Siêu thị đã chọn: {prev_ret}\n"
+
     prompt = (
-        "Trả về JSON duy nhất theo schema: name (product_search|compare_prices|deals|clarification|basket), "
-        "product, brand, package, retailers (mảng retailer_id trong bachhoaxanh, go, lottemart, "
-        "mmvietnam, winmart). product chỉ gồm tên sản phẩm/nhóm sản phẩm, không gồm từ giao tiếp. "
-        "brand và package dùng null nếu không rõ. Chỉ liệt kê nhà bán lẻ người dùng nêu rõ. "
-        "Câu hỏi: " + message
+        "Bạn là bộ trích xuất ý định tìm kiếm cho trợ lý mua sắm siêu thị Việt Nam.\n"
+        f"{context_str}"
+        "Hãy phân tích câu hỏi của người dùng và trả về JSON duy nhất theo schema:\n"
+        "{\n"
+        '  "name": "product_search" | "compare_prices" | "deals" | "clarification" | "basket",\n'
+        '  "product": "tên sản phẩm/nhóm sản phẩm (ví dụ: khẩu trang, sữa Vinamilk)",\n'
+        '  "brand": "thương hiệu hoặc null",\n'
+        '  "package": "quy cách (ví dụ: 1L, 180ml, 1kg) hoặc null",\n'
+        '  "retailers": ["mảng id siêu thị được nêu: bachhoaxanh, go, lottemart, mmvietnam, winmart"]\n'
+        "}\n\n"
+        "Quy tắc quan trọng:\n"
+        "1. Loại bỏ hoàn toàn các từ giao tiếp, hư từ, câu hỏi đuôi (như 'hả', 'sao', 'không có bán hả', 'có không', 'ạ', 'nhỉ').\n"
+        "2. Nếu đây là câu hỏi nối tiếp về siêu thị/quy cách khác (ví dụ: 'ở lottemart không có sao', 'Ở GO không có bán hả', 'còn WinMart thì sao'), "
+        "hãy KẾ THỪA tên sản phẩm từ Lịch sử trò chuyện và trích xuất siêu thị mới vào danh sách retailers.\n"
+        "3. Trả về định dạng JSON hợp lệ duy nhất, không kèm giải thích.\n\n"
+        f"Câu hỏi người dùng: \"{message}\""
     )
     raw = ""
 
@@ -464,21 +480,27 @@ async def parse_intent(message: str, settings: Settings) -> Intent:
             model_retailers = []
             model_name = None
 
-    # A model query must share a product token with the original request. This blocks
-    # hallucinations (for example returning "bột giặt" for a toothpaste question).
+    # Require model query to share tokens with original request or previous context to prevent hallucinations
     original_tokens = set(deterministic.query.split())
-    model_tokens = set(model_query.split())
-    safe_model_query = model_query if model_tokens & original_tokens else ""
+    if previous and previous.get("query"):
+        original_tokens.update(set(str(previous["query"]).split()))
 
-    # Rules win on disagreement. The model query is only an optional, cleaner product
-    # expression; main.py retries the deterministic query if it yields no records.
-    return replace(
+    model_tokens = set(model_query.split())
+    if original_tokens:
+        safe_model_query = model_query if (model_tokens & original_tokens) else ""
+    else:
+        safe_model_query = model_query
+
+    final_query = safe_model_query or deterministic.query
+    final_retailers = model_retailers or deterministic.retailers
+    final_name = model_name or deterministic.name
+
+    resolved = replace(
         deterministic,
-        name=model_name if model_name == deterministic.name else deterministic.name,
-        query=safe_model_query or deterministic.query,
-        retailers=deterministic.retailers or model_retailers,
+        name=final_name,
+        query=final_query,
+        retailers=final_retailers,
         brand=model_brand or deterministic.brand,
-        # A deterministic multipack keeps its multiplier; an LLM commonly
-        # extracts only the per-item size and would otherwise loosen filtering.
-        package=deterministic.package or model_package,
+        package=model_package or deterministic.package,
     )
+    return apply_conversation_context(resolved, previous, message)

@@ -487,7 +487,7 @@ async def chat(request: ChatRequest):
         except PermissionError: raise HTTPException(404, "Không tìm thấy cuộc trò chuyện")
         yield event("conversation", {"conversation_id": cid})
         previous = conversation_context(cid)
-        intent = apply_conversation_context(await parse_intent(request.message, settings), previous, request.message)
+        intent = apply_conversation_context(await parse_intent(request.message, settings, previous), previous, request.message)
         if intent.name == "clarification":
             answer = intent.clarification or "Bạn muốn tiếp tục tìm hoặc so sánh sản phẩm nào?"
             payload = {"intent": "clarification", "offers": [], "needs_clarification": True, "context": previous}
